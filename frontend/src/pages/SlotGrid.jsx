@@ -1,23 +1,28 @@
 import { useState } from "react";
 import { useParams, Link } from "react-router-dom";
-import { MapPin, Users, Clock, Star, ArrowLeft, CheckCircle, Info, Lock } from "lucide-react";
+import { MapPin, Users, Clock, Star, ArrowLeft, CheckCircle, Info, MessageSquarePlus, User, X, ZoomIn } from "lucide-react";
 import { useFacility } from "../hooks/useFacilities";
 import { getUpcomingDates, buildFacilitySlots } from "../data/facilities";
 import { useBookings } from "../hooks/useBookings";
 import { useAuth } from "../hooks/useAuth";
+import { useReviews } from "../hooks/useReviews";
 import BookingModal from "../components/BookingModal";
 import LoginModal from "../components/LoginModal";
+import ReviewModal from "../components/ReviewModal";
 
 export default function SlotGrid() {
   const { id } = useParams();
   const { data: facility, isLoading } = useFacility(id);
-  const { bookings, addBooking, isSlotBooked } = useBookings();
+  const { addBooking, isSlotBooked } = useBookings();
   const { user } = useAuth();
+  const { getReviewsForFacility, getAverageRating, addReview } = useReviews();
 
   const dates = getUpcomingDates();
   const [selectedDate, setSelectedDate] = useState(dates[0]);
   const [selectedSlotForBooking, setSelectedSlotForBooking] = useState(null);
   const [showLoginPrompt, setShowLoginPrompt] = useState(false);
+  const [showReviewModal, setShowReviewModal] = useState(false);
+  const [lightboxImage, setLightboxImage] = useState(null);
   const [pendingSlot, setPendingSlot] = useState(null);
   const [toastMessage, setToastMessage] = useState(null);
 
@@ -41,6 +46,9 @@ export default function SlotGrid() {
     );
   }
 
+  const facilityReviews = getReviewsForFacility(facility.id);
+  const avgRating = getAverageRating(facility.id, facility.rating);
+
   // Build base slots for date
   const rawSlots = buildFacilitySlots(facility.id, selectedDate.dateKey, selectedDate.isToday);
 
@@ -58,7 +66,6 @@ export default function SlotGrid() {
   const handleSlotClick = (slot) => {
     if (slot.status !== "available") return;
 
-    // Check authentication requirement before booking slot
     if (!user) {
       setPendingSlot(slot);
       setShowLoginPrompt(true);
@@ -68,7 +75,7 @@ export default function SlotGrid() {
     setSelectedSlotForBooking(slot);
   };
 
-  const handleLoginSuccess = (loggedInUser) => {
+  const handleLoginSuccess = () => {
     setShowLoginPrompt(false);
     if (pendingSlot) {
       setSelectedSlotForBooking(pendingSlot);
@@ -96,6 +103,21 @@ export default function SlotGrid() {
     setSelectedSlotForBooking(null);
 
     setTimeout(() => setToastMessage(null), 5000);
+  };
+
+  const handleReviewSubmit = (reviewData) => {
+    addReview(reviewData);
+    setShowReviewModal(false);
+    setToastMessage("Thank you! Your review with photos has been published.");
+    setTimeout(() => setToastMessage(null), 4000);
+  };
+
+  const handleWriteReviewClick = () => {
+    if (!user) {
+      setShowLoginPrompt(true);
+      return;
+    }
+    setShowReviewModal(true);
   };
 
   return (
@@ -154,7 +176,7 @@ export default function SlotGrid() {
               <Clock className="h-4 w-4 text-muted" /> {facility.slotDuration}
             </span>
             <span className="flex items-center gap-1.5 text-accent font-bold">
-              <Star className="h-4 w-4 fill-current" strokeWidth={0} /> {facility.rating}
+              <Star className="h-4 w-4 fill-current" strokeWidth={0} /> {avgRating} ({facilityReviews.length} reviews)
             </span>
           </div>
 
@@ -253,6 +275,104 @@ export default function SlotGrid() {
                 );
               })}
             </div>
+
+            {/* Student Reviews Section */}
+            <div className="mt-12 pt-8 border-t border-surface-border/80">
+              <div className="flex items-center justify-between">
+                <div>
+                  <h3 className="font-display text-2xl font-bold text-white">
+                    Student Reviews & Photos
+                  </h3>
+                  <div className="flex items-center gap-2 mt-1 text-sm text-muted">
+                    <span className="flex items-center gap-1 font-bold text-accent">
+                      <Star className="h-4 w-4 fill-current" strokeWidth={0} /> {avgRating} out of 5
+                    </span>
+                    <span>• {facilityReviews.length} student reviews</span>
+                  </div>
+                </div>
+
+                <button
+                  onClick={handleWriteReviewClick}
+                  className="flex items-center gap-2 rounded-full bg-accent px-4 py-2 text-xs font-bold text-accent-foreground shadow-md transition hover:brightness-110"
+                >
+                  <MessageSquarePlus className="h-4 w-4" /> Write a Review
+                </button>
+              </div>
+
+              {facilityReviews.length === 0 ? (
+                <div className="mt-6 rounded-2xl border border-surface-border bg-surface/50 p-6 text-center text-xs text-muted">
+                  No reviews submitted yet for this facility. Be the first student to leave feedback!
+                </div>
+              ) : (
+                <div className="mt-6 space-y-4">
+                  {facilityReviews.map((rev) => (
+                    <div
+                      key={rev.id}
+                      className="rounded-2xl border border-surface-border bg-surface/80 p-5 space-y-3 shadow-md"
+                    >
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-2">
+                          <span className="flex h-8 w-8 items-center justify-center rounded-full bg-accent/20 text-accent font-bold text-xs">
+                            <User className="h-4 w-4" />
+                          </span>
+                          <div>
+                            <span className="text-sm font-bold text-white block">
+                              {rev.studentName}
+                            </span>
+                            <span className="text-[10px] text-muted block">
+                              Roll No: {rev.rollNumber}
+                            </span>
+                          </div>
+                        </div>
+
+                        <div className="flex items-center gap-1">
+                          {[...Array(5)].map((_, i) => (
+                            <Star
+                              key={i}
+                              className={`h-3.5 w-3.5 ${
+                                i < rev.rating
+                                  ? "fill-accent text-accent"
+                                  : "text-surface-border fill-surface"
+                              }`}
+                            />
+                          ))}
+                        </div>
+                      </div>
+
+                      <p className="text-xs text-muted/90 leading-relaxed pl-10">
+                        "{rev.comment}"
+                      </p>
+
+                      {/* Photo Attachments Grid (Amazon / Flipkart Style) */}
+                      {rev.images && rev.images.length > 0 && (
+                        <div className="pl-10 pt-1 flex flex-wrap gap-2">
+                          {rev.images.map((imgSrc, imgIdx) => (
+                            <div
+                              key={imgIdx}
+                              onClick={() => setLightboxImage(imgSrc)}
+                              className="relative group h-20 w-24 rounded-xl overflow-hidden border border-surface-border cursor-pointer shadow-sm hover:border-accent/60 transition"
+                            >
+                              <img
+                                src={imgSrc}
+                                alt="Student upload"
+                                className="h-full w-full object-cover transition-transform group-hover:scale-110"
+                              />
+                              <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 flex items-center justify-center text-white transition">
+                                <ZoomIn className="h-4 w-4" />
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+
+                      <div className="text-[10px] text-muted/60 pl-10 font-mono">
+                        Posted on {rev.date}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
           </div>
 
           {/* Right Column: Rules Card & Info */}
@@ -294,7 +414,7 @@ export default function SlotGrid() {
           }}
           onSuccess={handleLoginSuccess}
           initialTab="student"
-          subtitle="Please sign in to lock your slot"
+          subtitle="Please sign in to proceed"
         />
       )}
 
@@ -307,6 +427,30 @@ export default function SlotGrid() {
           onClose={() => setSelectedSlotForBooking(null)}
           onConfirm={handleBookingConfirm}
         />
+      )}
+
+      {/* Write Review Modal */}
+      {showReviewModal && (
+        <ReviewModal
+          facility={facility}
+          onClose={() => setShowReviewModal(false)}
+          onSubmit={handleReviewSubmit}
+        />
+      )}
+
+      {/* Lightbox Image View Modal */}
+      {lightboxImage && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/90 p-4 backdrop-blur-md animate-fadeIn">
+          <div className="relative max-w-3xl max-h-[90vh] overflow-hidden rounded-2xl border border-surface-border bg-base p-2">
+            <button
+              onClick={() => setLightboxImage(null)}
+              className="absolute right-4 top-4 z-10 rounded-full bg-black/60 p-2 text-white hover:bg-black/90 transition"
+            >
+              <X className="h-5 w-5" />
+            </button>
+            <img src={lightboxImage} alt="Ground detail" className="max-h-[85vh] w-full object-contain rounded-xl" />
+          </div>
+        </div>
       )}
     </div>
   );

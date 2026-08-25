@@ -3,22 +3,28 @@ import StatCard from "./StatCard";
 
 export default function Hero({ facilityCount, searchValue, onSearchChange }) {
   return (
-    <section className="relative overflow-hidden border-b border-surface-border bg-base">
-      {/* Background Image Overlay */}
+    <section className="relative overflow-hidden border-b border-surface-border bg-base min-h-[520px] flex items-center">
+      {/* Blurred Ground Background Overlay */}
       <div
-        className="absolute inset-0 bg-cover bg-center opacity-25"
+        className="absolute inset-0 bg-cover bg-center opacity-40 blur-[3px] scale-105 transform transition-transform duration-700"
         style={{
           backgroundImage:
-            "url('https://images.unsplash.com/photo-1508098682722-e99c43a406b2?q=80&w=1600&auto=format&fit=crop')"
+            "url('https://images.unsplash.com/photo-1574629810360-7efbbe195018?q=80&w=1800&auto=format&fit=crop')"
         }}
         aria-hidden="true"
       />
+
+      {/* Dark Vignette / Gradient Overlay */}
       <div
-        className="absolute inset-0 bg-gradient-to-b from-base/50 via-base/85 to-base"
+        className="absolute inset-0 bg-gradient-to-b from-base/60 via-base/80 to-base"
+        aria-hidden="true"
+      />
+      <div
+        className="absolute inset-0 bg-gradient-to-r from-base via-base/70 to-transparent"
         aria-hidden="true"
       />
 
-      <div className="relative mx-auto max-w-7xl px-4 py-16 sm:px-6 sm:py-24">
+      <div className="relative mx-auto max-w-7xl px-4 py-16 sm:px-6 sm:py-24 w-full">
         <span className="inline-block rounded-full border border-accent/40 bg-accent/10 px-3.5 py-1 text-xs font-bold tracking-wider text-accent uppercase">
           SPORTS BOARD × TECH BOARD
         </span>

@@ -1,12 +1,14 @@
 import { useState } from "react";
 import { NavLink } from "react-router-dom";
-import { Zap, LogOut, User, ShieldCheck } from "lucide-react";
+import { Zap, LogOut, User, ShieldCheck, Mail } from "lucide-react";
 import { useAuth } from "../hooks/useAuth";
 import LoginModal from "./LoginModal";
+import ContactModal from "./ContactModal";
 
 export default function Navbar() {
   const { user, isAdmin, logout } = useAuth();
   const [showLoginModal, setShowLoginModal] = useState(false);
+  const [showContactModal, setShowContactModal] = useState(false);
 
   return (
     <>
@@ -27,7 +29,7 @@ export default function Navbar() {
             </span>
           </NavLink>
 
-          {/* Navigation links: Facilities & My Bookings (Admin added dynamically if logged in as Admin) */}
+          {/* Navigation links: Facilities, My Bookings, Contact Us */}
           <nav className="hidden items-center gap-1 rounded-full bg-surface/90 border border-surface-border/50 p-1.5 sm:flex">
             <NavLink
               to="/"
@@ -56,7 +58,15 @@ export default function Navbar() {
               My bookings
             </NavLink>
 
-            {/* Dynamic Admin Link only when logged in as Admin */}
+            <button
+              type="button"
+              onClick={() => setShowContactModal(true)}
+              className="rounded-full px-5 py-1.5 text-sm font-medium text-muted hover:text-white transition-all flex items-center gap-1.5"
+            >
+              <Mail className="h-3.5 w-3.5" /> Contact us
+            </button>
+
+            {/* Dynamic Admin Link when logged in as Admin */}
             {isAdmin && (
               <NavLink
                 to="/admin"
@@ -112,9 +122,14 @@ export default function Navbar() {
         </div>
       </header>
 
-      {/* Unified Login Modal (Student & Admin Role Switcher) */}
+      {/* Login Modal */}
       {showLoginModal && (
         <LoginModal onClose={() => setShowLoginModal(false)} />
+      )}
+
+      {/* Contact Us Modal */}
+      {showContactModal && (
+        <ContactModal onClose={() => setShowContactModal(false)} />
       )}
     </>
   );
