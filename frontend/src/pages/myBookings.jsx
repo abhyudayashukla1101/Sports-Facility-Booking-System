@@ -8,14 +8,20 @@ export default function MyBookings() {
   const { bookings, waitlists, cancelBooking, cancelWaitlist } = useBookings();
   const [toastMessage, setToastMessage] = useState(null);
 
-  const handleCancelBooking = (id) => {
-    const result = cancelBooking(id);
-    if (result.promoted) {
-      setToastMessage(
-        `Booking cancelled. Auto-promoted ${result.promotedStudent} (${result.rollNumber}) from Waitlist #1 to Confirmed!`
-      );
-      setTimeout(() => setToastMessage(null), 6000);
+  const handleCancelBooking = async (id) => {
+    try {
+      const result = await cancelBooking(id);
+      if (result.promoted) {
+        setToastMessage(
+          `Booking cancelled. Auto-promoted ${result.promotedStudent} (${result.rollNumber}) from Waitlist #1 to Confirmed!`
+        );
+      } else {
+        setToastMessage("Booking successfully cancelled.");
+      }
+    } catch (err) {
+      setToastMessage(`Failed to cancel booking: ${err.message}`);
     }
+    setTimeout(() => setToastMessage(null), 6000);
   };
 
   const activeWaitlists = waitlists.filter((w) => w.status === "WAITLISTED");
@@ -102,7 +108,15 @@ export default function MyBookings() {
 
                 <div className="mt-6 pt-4 border-t border-surface-border/60">
                   <button
-                    onClick={() => cancelWaitlist(w.id)}
+                    onClick={async () => {
+                      try {
+                        await cancelWaitlist(w.id);
+                        setToastMessage("Successfully left waitlist.");
+                      } catch (err) {
+                        setToastMessage(`Failed to leave waitlist: ${err.message}`);
+                      }
+                      setTimeout(() => setToastMessage(null), 4000);
+                    }}
                     className="flex w-full items-center justify-center gap-2 rounded-xl border border-surface-border bg-base/60 py-2 text-xs font-bold text-muted hover:text-white hover:border-booked/40 transition"
                   >
                     <Trash2 className="h-3.5 w-3.5" /> Leave Waitlist

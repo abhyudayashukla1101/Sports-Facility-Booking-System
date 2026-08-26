@@ -1,12 +1,36 @@
-import { useState } from "react";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Activity, ShieldCheck, Users, Calendar, AlertTriangle, CheckCircle2, Sliders } from "lucide-react";
-import { MOCK_FACILITIES } from "../data/facilities";
+import { getAnalytics, toggleMaintenance as apiToggleMaintenance } from "../api/client";
+import { useFacilities } from "../hooks/useFacilities";
 
 export default function AnalyticsDashboard() {
-  const [maintenanceMode, setMaintenanceMode] = useState({});
+  const queryClient = useQueryClient();
 
-  const toggleMaintenance = (id) => {
-    setMaintenanceMode((prev) => ({ ...prev, [id]: !prev[id] }));
+  // Query: Get live operational metrics
+  const { data: analytics = { totalBookings: 0, peakHoursUtilization: 0, collisions: 0, activeUsers: 0 } } = useQuery({
+    queryKey: ["analytics"],
+    queryFn: getAnalytics
+  });
+
+  // Query: Get all facilities
+  const { data: facilities = [], isLoading: isLoadingFacilities } = useFacilities();
+
+  // Mutation: Toggle maintenance lock
+  const toggleMaintenanceMutation = useMutation({
+    mutationFn: ({ id, isMaintenanceLocked }) => apiToggleMaintenance(id, isMaintenanceLocked),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["facilities"] });
+      queryClient.invalidateQueries({ queryKey: ["analytics"] });
+      queryClient.invalidateQueries({ queryKey: ["slots"] });
+    }
+  });
+
+  const handleToggleMaintenance = async (id, currentStatus) => {
+    try {
+      await toggleMaintenanceMutation.mutateAsync({ id, isMaintenanceLocked: !currentStatus });
+    } catch (err) {
+      alert(`Failed to update maintenance mode: ${err.message}`);
+    }
   };
 
   return (
@@ -26,9 +50,9 @@ export default function AnalyticsDashboard() {
             <span className="text-xs font-semibold text-muted">Total Slots Reserved Today</span>
             <Calendar className="h-5 w-5 text-accent" />
           </div>
-          <div className="mt-3 font-display text-3xl font-bold text-white">142</div>
+          <div className="mt-3 font-display text-3xl font-bold text-white">{analytics.totalBookings}</div>
           <span className="mt-1 inline-block text-[11px] font-semibold text-available">
-            +18% from yesterday
+            Updated live from database
           </span>
         </div>
 
@@ -37,7 +61,7 @@ export default function AnalyticsDashboard() {
             <span className="text-xs font-semibold text-muted">Peak Hours Utilization</span>
             <Activity className="h-5 w-5 text-accent" />
           </div>
-          <div className="mt-3 font-display text-3xl font-bold text-white">88.4%</div>
+          <div className="mt-3 font-display text-3xl font-bold text-white">{analytics.peakHoursUtilization}%</div>
           <span className="mt-1 inline-block text-[11px] font-semibold text-accent">
             Peak: 6:00 PM – 10:00 PM
           </span>
@@ -48,7 +72,7 @@ export default function AnalyticsDashboard() {
             <span className="text-xs font-semibold text-muted">Double-Booking Collisions</span>
             <ShieldCheck className="h-5 w-5 text-available" />
           </div>
-          <div className="mt-3 font-display text-3xl font-bold text-white">0</div>
+          <div className="mt-3 font-display text-3xl font-bold text-white">{analytics.collisions}</div>
           <span className="mt-1 inline-block text-[11px] font-semibold text-available">
             100% Conflict Prevention
           </span>
@@ -59,9 +83,9 @@ export default function AnalyticsDashboard() {
             <span className="text-xs font-semibold text-muted">Active Campus Users</span>
             <Users className="h-5 w-5 text-accent" />
           </div>
-          <div className="mt-3 font-display text-3xl font-bold text-white">1,280</div>
+          <div className="mt-3 font-display text-3xl font-bold text-white">{analytics.activeUsers}</div>
           <span className="mt-1 inline-block text-[11px] font-semibold text-muted">
-            Across 10 Facilities
+            Across registered slots
           </span>
         </div>
       </div>
@@ -91,8 +115,8 @@ export default function AnalyticsDashboard() {
               </tr>
             </thead>
             <tbody className="divide-y divide-surface-border/50">
-              {MOCK_FACILITIES.map((f) => {
-                const isUnderMaintenance = maintenanceMode[f.id];
+              {facilities.map((f) => {
+                const isUnderMaintenance = f.isMaintenanceLocked;
 
                 return (
                   <tr key={f.id} className="hover:bg-surface-hover/50 transition">
@@ -118,7 +142,7 @@ export default function AnalyticsDashboard() {
                     </td>
                     <td className="px-6 py-4 text-right">
                       <button
-                        onClick={() => toggleMaintenance(f.id)}
+                        onClick={() => handleToggleMaintenance(f.id, f.isMaintenanceLocked)}
                         className={`rounded-full px-4 py-1.5 text-xs font-bold transition ${
                           isUnderMaintenance
                             ? "bg-available text-base hover:brightness-110"

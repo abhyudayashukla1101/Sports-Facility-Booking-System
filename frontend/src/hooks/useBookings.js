@@ -1,228 +1,88 @@
-import { useState, useEffect } from "react";
-
-const BOOKINGS_STORAGE_KEY = "playfield_iitg_bookings";
-const WAITLIST_STORAGE_KEY = "playfield_iitg_waitlists";
-
-const INITIAL_BOOKINGS = [
-  {
-    id: "bk_101",
-    facilityId: "badminton-hall",
-    facilityName: "Badminton Hall",
-    location: "SAC Indoor Hall, First Floor",
-    dateKey: new Date().toISOString().split("T")[0],
-    slotId: "7pm",
-    startLabel: "7:00 pm",
-    endLabel: "8:00 pm",
-    rollNumber: "220101045",
-    studentName: "Abhyudaya Shukla",
-    hostel: "Lohit",
-    status: "CONFIRMED",
-    bookedAt: new Date().toISOString()
-  }
-];
-
-const INITIAL_WAITLISTS = [
-  {
-    id: "wl_501",
-    facilityId: "badminton-hall",
-    facilityName: "Badminton Hall",
-    location: "SAC Indoor Hall, First Floor",
-    dateKey: new Date().toISOString().split("T")[0],
-    slotId: "7pm",
-    startLabel: "7:00 pm",
-    endLabel: "8:00 pm",
-    rollNumber: "210102033",
-    studentName: "Devansh Mehta",
-    hostel: "Kapili",
-    queuePosition: 1,
-    status: "WAITLISTED",
-    createdAt: new Date().toISOString()
-  }
-];
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { useAuth } from "./useAuth";
+import {
+  createBooking,
+  cancelBooking as apiCancelBooking,
+  joinWaitlist as apiJoinWaitlist,
+  cancelWaitlist as apiCancelWaitlist,
+  getMyBookings
+} from "../api/client";
 
 export function useBookings() {
-  const [bookings, setBookings] = useState(() => {
-    try {
-      const saved = localStorage.getItem(BOOKINGS_STORAGE_KEY);
-      return saved ? JSON.parse(saved) : INITIAL_BOOKINGS;
-    } catch {
-      return INITIAL_BOOKINGS;
+  const { user } = useAuth();
+  const rollNumber = user?.rollNumber;
+  const queryClient = useQueryClient();
+
+  // Query: Get logged-in user's bookings and waitlists from server
+  const { data = { bookings: [], waitlists: [] } } = useQuery({
+    queryKey: ["myBookings", rollNumber],
+    queryFn: () => getMyBookings(rollNumber),
+    enabled: Boolean(rollNumber)
+  });
+
+  const bookings = data.bookings ?? [];
+  const waitlists = data.waitlists ?? [];
+
+  // Mutation: Create Booking
+  const createBookingMutation = useMutation({
+    mutationFn: createBooking,
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["myBookings", rollNumber] });
+      queryClient.invalidateQueries({ queryKey: ["slots"] });
+      queryClient.invalidateQueries({ queryKey: ["analytics"] });
     }
   });
 
-  const [waitlists, setWaitlists] = useState(() => {
-    try {
-      const saved = localStorage.getItem(WAITLIST_STORAGE_KEY);
-      return saved ? JSON.parse(saved) : INITIAL_WAITLISTS;
-    } catch {
-      return INITIAL_WAITLISTS;
+  // Mutation: Cancel Booking (promotes top waitlist candidate on backend)
+  const cancelBookingMutation = useMutation({
+    mutationFn: apiCancelBooking,
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["myBookings", rollNumber] });
+      queryClient.invalidateQueries({ queryKey: ["slots"] });
+      queryClient.invalidateQueries({ queryKey: ["analytics"] });
     }
   });
 
-  useEffect(() => {
-    try {
-      localStorage.setItem(BOOKINGS_STORAGE_KEY, JSON.stringify(bookings));
-    } catch (e) {
-      console.error("Failed to save bookings to localStorage", e);
+  // Mutation: Join Waitlist
+  const joinWaitlistMutation = useMutation({
+    mutationFn: apiJoinWaitlist,
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["myBookings", rollNumber] });
+      queryClient.invalidateQueries({ queryKey: ["slots"] });
+      queryClient.invalidateQueries({ queryKey: ["analytics"] });
     }
-  }, [bookings]);
+  });
 
-  useEffect(() => {
-    try {
-      localStorage.setItem(WAITLIST_STORAGE_KEY, JSON.stringify(waitlists));
-    } catch (e) {
-      console.error("Failed to save waitlists to localStorage", e);
+  // Mutation: Cancel Waitlist (Leave queue)
+  const cancelWaitlistMutation = useMutation({
+    mutationFn: apiCancelWaitlist,
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["myBookings", rollNumber] });
+      queryClient.invalidateQueries({ queryKey: ["slots"] });
+      queryClient.invalidateQueries({ queryKey: ["analytics"] });
     }
-  }, [waitlists]);
+  });
 
-  const addBooking = (newBooking) => {
-    const bookingItem = {
-      id: `bk_${Date.now().toString().slice(-6)}`,
-      status: "CONFIRMED",
-      bookedAt: new Date().toISOString(),
-      ...newBooking
-    };
-    setBookings((prev) => [bookingItem, ...prev]);
-    return bookingItem;
+  // Wrappers to match existing function signatures
+  const addBooking = async (bookingDetails) => {
+    const res = await createBookingMutation.mutateAsync(bookingDetails);
+    return res.booking;
   };
 
-  const cancelBooking = (bookingId) => {
-    let cancelledBooking = null;
-
-    setBookings((prev) =>
-      prev.map((b) => {
-        if (b.id === bookingId) {
-          cancelledBooking = b;
-          return { ...b, status: "CANCELLED" };
-        }
-        return b;
-      })
-    );
-
-    // AUTO-PROMOTION ENGINE:
-    // Check if there is an active waitlist for this specific slot
-    if (cancelledBooking) {
-      const { facilityId, dateKey, slotId } = cancelledBooking;
-
-      // Find eligible waitlisted entries sorted by queuePosition
-      const activeWaitlist = waitlists
-        .filter(
-          (w) =>
-            w.facilityId === facilityId &&
-            w.dateKey === dateKey &&
-            w.slotId === slotId &&
-            w.status === "WAITLISTED"
-        )
-        .sort((a, b) => a.queuePosition - b.queuePosition);
-
-      if (activeWaitlist.length > 0) {
-        const topCandidate = activeWaitlist[0];
-
-        // 1. Promote top candidate to confirmed booking
-        const promotedBooking = {
-          id: `bk_promoted_${Date.now().toString().slice(-5)}`,
-          facilityId: topCandidate.facilityId,
-          facilityName: topCandidate.facilityName,
-          location: topCandidate.location,
-          dateKey: topCandidate.dateKey,
-          slotId: topCandidate.slotId,
-          startLabel: topCandidate.startLabel,
-          endLabel: topCandidate.endLabel,
-          rollNumber: topCandidate.rollNumber,
-          studentName: topCandidate.studentName,
-          hostel: topCandidate.hostel,
-          status: "CONFIRMED",
-          bookedAt: new Date().toISOString(),
-          promotedFromWaitlist: true
-        };
-
-        setBookings((prev) => [promotedBooking, ...prev]);
-
-        // 2. Mark candidate waitlist as PROMOTED & adjust positions of remaining candidates
-        setWaitlists((prev) =>
-          prev.map((w) => {
-            if (w.id === topCandidate.id) {
-              return { ...w, status: "PROMOTED" };
-            }
-            if (
-              w.facilityId === facilityId &&
-              w.dateKey === dateKey &&
-              w.slotId === slotId &&
-              w.status === "WAITLISTED" &&
-              w.queuePosition > topCandidate.queuePosition
-            ) {
-              return { ...w, queuePosition: w.queuePosition - 1 };
-            }
-            return w;
-          })
-        );
-
-        return {
-          promoted: true,
-          promotedStudent: topCandidate.studentName,
-          rollNumber: topCandidate.rollNumber,
-          startLabel: topCandidate.startLabel
-        };
-      }
-    }
-
-    return { promoted: false };
+  const cancelBooking = async (bookingId) => {
+    return cancelBookingMutation.mutateAsync(bookingId);
   };
 
-  const joinWaitlist = (newWaitlist) => {
-    // Calculate current position
-    const currentQueue = waitlists.filter(
-      (w) =>
-        w.facilityId === newWaitlist.facilityId &&
-        w.dateKey === newWaitlist.dateKey &&
-        w.slotId === newWaitlist.slotId &&
-        w.status === "WAITLISTED"
-    );
-
-    const queuePosition = currentQueue.length + 1;
-
-    const item = {
-      id: `wl_${Date.now().toString().slice(-6)}`,
-      queuePosition,
-      status: "WAITLISTED",
-      createdAt: new Date().toISOString(),
-      ...newWaitlist
-    };
-
-    setWaitlists((prev) => [item, ...prev]);
-    return item;
+  const joinWaitlist = async (waitlistDetails) => {
+    const res = await joinWaitlistMutation.mutateAsync(waitlistDetails);
+    return res.waitlist;
   };
 
-  const cancelWaitlist = (waitlistId) => {
-    let target = null;
-    setWaitlists((prev) => {
-      return prev.map((w) => {
-        if (w.id === waitlistId) {
-          target = w;
-          return { ...w, status: "CANCELLED" };
-        }
-        return w;
-      });
-    });
-
-    if (target) {
-      setWaitlists((prev) =>
-        prev.map((w) => {
-          if (
-            w.facilityId === target.facilityId &&
-            w.dateKey === target.dateKey &&
-            w.slotId === target.slotId &&
-            w.status === "WAITLISTED" &&
-            w.queuePosition > target.queuePosition
-          ) {
-            return { ...w, queuePosition: w.queuePosition - 1 };
-          }
-          return w;
-        })
-      );
-    }
+  const cancelWaitlist = async (waitlistId) => {
+    return cancelWaitlistMutation.mutateAsync(waitlistId);
   };
 
+  // Local helper functions to support legacy calls if any
   const getWaitlistQueueCount = (facilityId, dateKey, slotId) => {
     return waitlists.filter(
       (w) =>
@@ -233,14 +93,15 @@ export function useBookings() {
     ).length;
   };
 
-  const getUserWaitlistEntry = (facilityId, dateKey, slotId, rollNumber) => {
-    if (!rollNumber) return null;
+  const getUserWaitlistEntry = (facilityId, dateKey, slotId, studentRoll) => {
+    const roll = studentRoll || rollNumber;
+    if (!roll) return null;
     return waitlists.find(
       (w) =>
         w.facilityId === facilityId &&
         w.dateKey === dateKey &&
         w.slotId === slotId &&
-        w.rollNumber === rollNumber &&
+        w.rollNumber === roll &&
         w.status === "WAITLISTED"
     );
   };

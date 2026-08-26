@@ -2,10 +2,11 @@ import { useState } from "react";
 import { useParams, Link } from "react-router-dom";
 import { MapPin, Users, Clock, Star, ArrowLeft, CheckCircle, Info, MessageSquarePlus, User, X, ZoomIn, Hourglass } from "lucide-react";
 import { useFacility } from "../hooks/useFacilities";
-import { getUpcomingDates, buildFacilitySlots } from "../data/facilities";
+import { getUpcomingDates } from "../data/facilities";
 import { useBookings } from "../hooks/useBookings";
 import { useAuth } from "../hooks/useAuth";
 import { useReviews } from "../hooks/useReviews";
+import { useSlots } from "../hooks/useSlots";
 import BookingModal from "../components/BookingModal";
 import LoginModal from "../components/LoginModal";
 import ReviewModal from "../components/ReviewModal";
@@ -14,12 +15,16 @@ import WaitlistModal from "../components/WaitlistModal";
 export default function SlotGrid() {
   const { id } = useParams();
   const { data: facility, isLoading } = useFacility(id);
-  const { addBooking, isSlotBooked, joinWaitlist, cancelWaitlist, getWaitlistQueueCount, getUserWaitlistEntry } = useBookings();
+  const { addBooking, joinWaitlist, cancelWaitlist } = useBookings();
   const { user } = useAuth();
-  const { getReviewsForFacility, getAverageRating, addReview } = useReviews();
+  const { getReviewsForFacility, getAverageRating, addReview } = useReviews(id);
 
   const dates = getUpcomingDates();
   const [selectedDate, setSelectedDate] = useState(dates[0]);
+
+  // Load slots grid dynamically from server
+  const { data: slots = [], isLoading: isLoadingSlots } = useSlots(id, selectedDate.dateKey);
+
   const [selectedSlotForBooking, setSelectedSlotForBooking] = useState(null);
   const [selectedSlotForWaitlist, setSelectedSlotForWaitlist] = useState(null);
   const [showLoginPrompt, setShowLoginPrompt] = useState(false);
@@ -28,7 +33,7 @@ export default function SlotGrid() {
   const [pendingSlot, setPendingSlot] = useState(null);
   const [toastMessage, setToastMessage] = useState(null);
 
-  if (isLoading) {
+  if (isLoading || isLoadingSlots) {
     return (
       <div className="mx-auto max-w-7xl px-4 py-20 text-center text-muted">
         <div className="mx-auto h-10 w-10 animate-spin rounded-full border-4 border-accent border-t-transparent" />
@@ -50,19 +55,6 @@ export default function SlotGrid() {
 
   const facilityReviews = getReviewsForFacility(facility.id);
   const avgRating = getAverageRating(facility.id, facility.rating);
-
-  // Build base slots for date
-  const rawSlots = buildFacilitySlots(facility.id, selectedDate.dateKey, selectedDate.isToday);
-
-  // Compute final slot status including locally booked slots
-  const slots = rawSlots.map((s) => {
-    const isLocallyBooked = isSlotBooked(facility.id, selectedDate.dateKey, s.id);
-    if (isLocallyBooked) {
-      return { ...s, status: "booked" };
-    }
-    return s;
-  });
-
   const openCount = slots.filter((s) => s.status === "available").length;
 
   const handleSlotClick = (slot) => {
@@ -86,9 +78,9 @@ export default function SlotGrid() {
         return;
       }
 
-      const existingWaitlist = getUserWaitlistEntry(facility.id, selectedDate.dateKey, slot.id, user.rollNumber);
-      if (existingWaitlist) {
-        setToastMessage(`You are already in queue (Position #${existingWaitlist.queuePosition}) for this slot.`);
+      const userWaitlist = slot.userWaitlist;
+      if (userWaitlist) {
+        setToastMessage(`You are already in queue (Position #${userWaitlist.queuePosition}) for this slot.`);
         setTimeout(() => setToastMessage(null), 4000);
         return;
       }
@@ -109,54 +101,66 @@ export default function SlotGrid() {
     }
   };
 
-  const handleBookingConfirm = (studentDetails) => {
-    addBooking({
-      facilityId: facility.id,
-      facilityName: facility.name,
-      location: facility.location,
-      dateKey: selectedDate.dateKey,
-      slotId: selectedSlotForBooking.id,
-      startLabel: selectedSlotForBooking.startLabel,
-      endLabel: selectedSlotForBooking.endLabel,
-      studentName: studentDetails.studentName,
-      rollNumber: studentDetails.rollNumber,
-      hostel: studentDetails.hostel
-    });
+  const handleBookingConfirm = async (studentDetails) => {
+    try {
+      await addBooking({
+        facilityId: facility.id,
+        facilityName: facility.name,
+        location: facility.location,
+        dateKey: selectedDate.dateKey,
+        slotId: selectedSlotForBooking.id,
+        startLabel: selectedSlotForBooking.startLabel,
+        endLabel: selectedSlotForBooking.endLabel,
+        studentName: studentDetails.studentName,
+        rollNumber: studentDetails.rollNumber,
+        hostel: studentDetails.hostel
+      });
 
-    setToastMessage(
-      `Slot locked! ${selectedSlotForBooking.startLabel} - ${selectedSlotForBooking.endLabel} booked for Roll No. ${studentDetails.rollNumber}`
-    );
-    setSelectedSlotForBooking(null);
-
-    setTimeout(() => setToastMessage(null), 5000);
-  };
-
-  const handleWaitlistConfirm = (studentDetails) => {
-    const entry = joinWaitlist({
-      facilityId: facility.id,
-      facilityName: facility.name,
-      location: facility.location,
-      dateKey: selectedDate.dateKey,
-      slotId: selectedSlotForWaitlist.id,
-      startLabel: selectedSlotForWaitlist.startLabel,
-      endLabel: selectedSlotForWaitlist.endLabel,
-      studentName: studentDetails.studentName,
-      rollNumber: studentDetails.rollNumber,
-      hostel: studentDetails.hostel
-    });
-
-    setToastMessage(
-      `Joined waitlist! You are Position #${entry.queuePosition} in line for ${selectedSlotForWaitlist.startLabel} slot.`
-    );
-    setSelectedSlotForWaitlist(null);
+      setToastMessage(
+        `Slot locked! ${selectedSlotForBooking.startLabel} - ${selectedSlotForBooking.endLabel} booked for Roll No. ${studentDetails.rollNumber}`
+      );
+      setSelectedSlotForBooking(null);
+    } catch (err) {
+      setToastMessage(`Booking failed: ${err.message}`);
+    }
 
     setTimeout(() => setToastMessage(null), 5000);
   };
 
-  const handleReviewSubmit = (reviewData) => {
-    addReview(reviewData);
-    setShowReviewModal(false);
-    setToastMessage("Thank you! Your review with photos has been published.");
+  const handleWaitlistConfirm = async (studentDetails) => {
+    try {
+      const entry = await joinWaitlist({
+        facilityId: facility.id,
+        facilityName: facility.name,
+        location: facility.location,
+        dateKey: selectedDate.dateKey,
+        slotId: selectedSlotForWaitlist.id,
+        startLabel: selectedSlotForWaitlist.startLabel,
+        endLabel: selectedSlotForWaitlist.endLabel,
+        studentName: studentDetails.studentName,
+        rollNumber: studentDetails.rollNumber,
+        hostel: studentDetails.hostel
+      });
+
+      setToastMessage(
+        `Joined waitlist! You are Position #${entry.queuePosition} in line for ${selectedSlotForWaitlist.startLabel} slot.`
+      );
+      setSelectedSlotForWaitlist(null);
+    } catch (err) {
+      setToastMessage(`Waitlist failed: ${err.message}`);
+    }
+
+    setTimeout(() => setToastMessage(null), 5000);
+  };
+
+  const handleReviewSubmit = async (reviewData) => {
+    try {
+      await addReview(reviewData);
+      setShowReviewModal(false);
+      setToastMessage("Thank you! Your review with photos has been published.");
+    } catch (err) {
+      setToastMessage(`Failed to submit review: ${err.message}`);
+    }
     setTimeout(() => setToastMessage(null), 4000);
   };
 
@@ -297,8 +301,8 @@ export default function SlotGrid() {
                 const isPassed = slot.status === "passed";
                 const isBooked = slot.status === "booked";
                 const isAvailable = slot.status === "available";
-                const queueCount = getWaitlistQueueCount(facility.id, selectedDate.dateKey, slot.id);
-                const userWaitlist = getUserWaitlistEntry(facility.id, selectedDate.dateKey, slot.id, user?.rollNumber);
+                const queueCount = slot.queueCount ?? 0;
+                const userWaitlist = slot.userWaitlist ?? null;
 
                 return (
                   <div
@@ -545,7 +549,7 @@ export default function SlotGrid() {
           facility={facility}
           slot={selectedSlotForWaitlist}
           dateObj={selectedDate}
-          queueCount={getWaitlistQueueCount(facility.id, selectedDate.dateKey, selectedSlotForWaitlist.id)}
+          queueCount={selectedSlotForWaitlist.queueCount ?? 0}
           onClose={() => setSelectedSlotForWaitlist(null)}
           onConfirm={handleWaitlistConfirm}
         />

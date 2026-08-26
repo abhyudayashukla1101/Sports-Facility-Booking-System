@@ -1,0 +1,372 @@
+import pg from "pg";
+import dotenv from "dotenv";
+
+dotenv.config();
+
+const { Pool } = pg;
+
+// Connection Pool Configuration
+const pool = new Pool({
+  host: process.env.PGHOST || "localhost",
+  port: parseInt(process.env.PGPORT || "5432", 10),
+  user: process.env.PGUSER || "postgres",
+  password: process.env.PGPASSWORD || "postgres",
+  database: process.env.PGDATABASE || "sports_booking"
+});
+
+pool.on("connect", () => {
+  console.log("Connected to the PostgreSQL database");
+});
+
+pool.on("error", (err) => {
+  console.error("PostgreSQL pool connection error:", err.message);
+});
+
+// Promisified SQL query helpers mapping to previous SQLite signatures
+export const query = {
+  async run(sql, params = []) {
+    const result = await pool.query(sql, params);
+    return { changes: result.rowCount };
+  },
+  async get(sql, params = []) {
+    const result = await pool.query(sql, params);
+    return result.rows[0] || null;
+  },
+  async all(sql, params = []) {
+    const result = await pool.query(sql, params);
+    return result.rows;
+  },
+  async exec(sql) {
+    await pool.query(sql);
+  }
+};
+
+// PostgreSQL Tables Schema Init
+export async function initDatabase() {
+  await query.exec(`
+    CREATE TABLE IF NOT EXISTS facilities (
+      id VARCHAR(255) PRIMARY KEY,
+      name VARCHAR(255) NOT NULL,
+      sport VARCHAR(255) NOT NULL,
+      rating DOUBLE PRECISION NOT NULL,
+      location VARCHAR(255) NOT NULL,
+      capacity INT NOT NULL,
+      slotDuration VARCHAR(255) NOT NULL,
+      hours VARCHAR(255) NOT NULL,
+      image TEXT NOT NULL,
+      description TEXT NOT NULL,
+      rules TEXT NOT NULL,
+      isMaintenanceLocked INT DEFAULT 0
+    );
+
+    CREATE TABLE IF NOT EXISTS bookings (
+      id VARCHAR(255) PRIMARY KEY,
+      facilityId VARCHAR(255) NOT NULL,
+      facilityName VARCHAR(255) NOT NULL,
+      location VARCHAR(255) NOT NULL,
+      dateKey VARCHAR(255) NOT NULL,
+      slotId VARCHAR(255) NOT NULL,
+      startLabel VARCHAR(255) NOT NULL,
+      endLabel VARCHAR(255) NOT NULL,
+      rollNumber VARCHAR(255) NOT NULL,
+      studentName VARCHAR(255) NOT NULL,
+      hostel VARCHAR(255) NOT NULL,
+      status VARCHAR(255) NOT NULL DEFAULT 'CONFIRMED',
+      bookedAt VARCHAR(255) NOT NULL,
+      promotedFromWaitlist INT DEFAULT 0,
+      FOREIGN KEY (facilityId) REFERENCES facilities(id) ON DELETE CASCADE
+    );
+
+    CREATE TABLE IF NOT EXISTS waitlists (
+      id VARCHAR(255) PRIMARY KEY,
+      facilityId VARCHAR(255) NOT NULL,
+      facilityName VARCHAR(255) NOT NULL,
+      location VARCHAR(255) NOT NULL,
+      dateKey VARCHAR(255) NOT NULL,
+      slotId VARCHAR(255) NOT NULL,
+      startLabel VARCHAR(255) NOT NULL,
+      endLabel VARCHAR(255) NOT NULL,
+      rollNumber VARCHAR(255) NOT NULL,
+      studentName VARCHAR(255) NOT NULL,
+      hostel VARCHAR(255) NOT NULL,
+      queuePosition INT NOT NULL,
+      status VARCHAR(255) NOT NULL DEFAULT 'WAITLISTED',
+      createdAt VARCHAR(255) NOT NULL,
+      FOREIGN KEY (facilityId) REFERENCES facilities(id) ON DELETE CASCADE
+    );
+
+    CREATE TABLE IF NOT EXISTS reviews (
+      id VARCHAR(255) PRIMARY KEY,
+      facilityId VARCHAR(255) NOT NULL,
+      studentName VARCHAR(255) NOT NULL,
+      rollNumber VARCHAR(255) NOT NULL,
+      rating INT NOT NULL,
+      comment TEXT NOT NULL,
+      images TEXT NOT NULL, -- JSON stringified array of image URLs
+      date VARCHAR(255) NOT NULL,
+      FOREIGN KEY (facilityId) REFERENCES facilities(id) ON DELETE CASCADE
+    );
+  `);
+
+  // Seed default data if facilities table is empty
+  const facilityCount = await query.get("SELECT COUNT(*) as count FROM facilities");
+  if (parseInt(facilityCount.count, 10) === 0) {
+    console.log("Seeding initial facility data...");
+    const MOCK_FACILITIES = [
+      {
+        id: "badminton-hall",
+        name: "Badminton Hall",
+        sport: "Badminton",
+        rating: 4.9,
+        location: "SAC Indoor Hall, First Floor",
+        capacity: 8,
+        slotDuration: "60-min slots",
+        hours: "6:00–22:00",
+        image: "https://images.unsplash.com/photo-1626224583764-f87db24ac4ea?q=80&w=1200&auto=format&fit=crop",
+        description: "Four wooden indoor courts with anti-glare lighting inside the SAC hall.",
+        rules: ["Indoor shoes compulsory", "Shuttles not provided", "Switch off lights after use"]
+      },
+      {
+        id: "basketball-court",
+        name: "Basketball Court",
+        sport: "Basketball",
+        rating: 4.6,
+        location: "Behind SAC Building",
+        capacity: 12,
+        slotDuration: "60-min slots",
+        hours: "6:00–22:00",
+        image: "https://images.unsplash.com/photo-1546519638-68e109498ffc?q=80&w=1200&auto=format&fit=crop",
+        description: "Outdoor full court with floodlights for evening play.",
+        rules: ["No metal studs", "Report damaged nets to admin", "Switch off lights after use"]
+      },
+      {
+        id: "main-football-ground",
+        name: "Main Football Ground",
+        sport: "Football",
+        rating: 4.7,
+        location: "Sports Complex Central Field",
+        capacity: 22,
+        slotDuration: "90-min slots",
+        hours: "6:00–21:00",
+        image: "https://images.unsplash.com/photo-1508098682722-e99c43a406b2?q=80&w=1200&auto=format&fit=crop",
+        description: "Full-size turf ground with floodlights, used for matches and practice.",
+        rules: ["Studs only, no bare cleats on turf", "No food or drink on turf", "Coordinate with team captain before booking"]
+      },
+      {
+        id: "sac-cricket-ground",
+        name: "SAC Cricket Ground",
+        sport: "Cricket",
+        rating: 4.8,
+        location: "Sports Complex, near Lohit Hostel",
+        capacity: 22,
+        slotDuration: "120-min slots",
+        hours: "6:00–21:00",
+        image: "https://images.unsplash.com/photo-1531415074968-036ba1b575da?q=80&w=1200&auto=format&fit=crop",
+        description: "Full cricket ground with practice nets on the side.",
+        rules: ["Book nets separately for practice", "No tennis-ball cricket on match days", "Roll the pitch cover back after use"]
+      },
+      {
+        id: "sac-gymnasium",
+        name: "SAC Gymnasium",
+        sport: "Gym",
+        rating: 4.8,
+        location: "SAC Ground Floor",
+        capacity: 30,
+        slotDuration: "60-min slots",
+        hours: "5:00–22:00",
+        image: "https://images.unsplash.com/photo-1534438327276-14e5300c3a48?q=80&w=1200&auto=format&fit=crop",
+        description: "Free weights, machines, and cardio equipment across two rooms.",
+        rules: ["Gym attire and shoes required", "Wipe down equipment after use", "Re-rack weights"]
+      },
+      {
+        id: "squash-court",
+        name: "Squash Court",
+        sport: "Squash",
+        rating: 4.5,
+        location: "SAC Indoor Hall",
+        capacity: 4,
+        slotDuration: "60-min slots",
+        hours: "6:00–22:00",
+        image: "https://images.unsplash.com/photo-1587280501635-68a0e82cd5ff?q=80&w=1200&auto=format&fit=crop",
+        description: "Two glass-backed squash courts, racquets available on request.",
+        rules: ["Non-marking shoes only", "Eye protection recommended", "Max 2 players per slot"]
+      },
+      {
+        id: "swimming-pool",
+        name: "Swimming Pool",
+        sport: "Swimming",
+        rating: 4.6,
+        location: "Aquatics Complex",
+        capacity: 24,
+        slotDuration: "60-min slots",
+        hours: "6:00–20:00",
+        image: "https://images.unsplash.com/photo-1576013551627-0cc20b96c2a7?q=80&w=1200&auto=format&fit=crop",
+        description: "Eight-lane outdoor pool, lifeguard on duty during all open slots.",
+        rules: ["Shower before entering", "Swim cap mandatory", "No diving in shallow end"]
+      },
+      {
+        id: "table-tennis-room",
+        name: "Table Tennis Room",
+        sport: "Table Tennis",
+        rating: 4.5,
+        location: "SAC Indoor Hall, Ground Floor",
+        capacity: 12,
+        slotDuration: "60-min slots",
+        hours: "6:00–22:00",
+        image: "https://images.unsplash.com/photo-1609710228159-0fa9bd7c0827?q=80&w=1200&auto=format&fit=crop",
+        description: "Six tables in a climate-controlled room, paddles available at the counter.",
+        rules: ["Bring your own paddle or borrow at counter", "Max 4 players per table", "Quiet hours after 9pm"]
+      },
+      {
+        id: "tennis-court",
+        name: "Tennis Court",
+        sport: "Tennis",
+        rating: 4.7,
+        location: "SAC Tennis Complex",
+        capacity: 6,
+        slotDuration: "60-min slots",
+        hours: "6:00–22:00",
+        image: "https://images.unsplash.com/photo-1595435934249-5df7ed86e1c0?q=80&w=1200&auto=format&fit=crop",
+        description: "Two hard courts near the hostel wing, lit for night play.",
+        rules: ["Non-marking shoes only", "Singles or doubles bookings allowed", "Return court to admin if unused after 10 min"]
+      },
+      {
+        id: "volleyball-court",
+        name: "Volleyball Court",
+        sport: "Volleyball",
+        rating: 4.4,
+        location: "Sports Complex, East Field",
+        capacity: 12,
+        slotDuration: "60-min slots",
+        hours: "6:00–21:00",
+        image: "https://images.unsplash.com/photo-1612872087720-bb876e2e67d1?q=80&w=1200&auto=format&fit=crop",
+        description: "Sand and hard-court volleyball setups side by side.",
+        rules: ["Bare feet allowed on sand court only", "Nets must be re-tensioned after use", "No spikes on hard court"]
+      }
+    ];
+
+    for (const f of MOCK_FACILITIES) {
+      await query.run(
+        `INSERT INTO facilities (id, name, sport, rating, location, capacity, slotDuration, hours, image, description, rules) 
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)`,
+        [
+          f.id,
+          f.name,
+          f.sport,
+          f.rating,
+          f.location,
+          f.capacity,
+          f.slotDuration,
+          f.hours,
+          f.image,
+          f.description,
+          JSON.stringify(f.rules)
+        ]
+      );
+    }
+  }
+
+  // Seed default reviews if reviews table is empty
+  const reviewCount = await query.get("SELECT COUNT(*) as count FROM reviews");
+  if (parseInt(reviewCount.count, 10) === 0) {
+    console.log("Seeding initial review data...");
+    const INITIAL_REVIEWS = [
+      {
+        id: "rev_1",
+        facilityId: "badminton-hall",
+        studentName: "Rohan Sharma",
+        rollNumber: "210101088",
+        rating: 5,
+        comment: "The wooden courts are in pristine condition! Anti-glare lighting makes evening matches amazing.",
+        images: ["https://images.unsplash.com/photo-1626224583764-f87db24ac4ea?q=80&w=600&auto=format&fit=crop"],
+        date: "2026-08-20"
+      },
+      {
+        id: "rev_2",
+        facilityId: "badminton-hall",
+        studentName: "Ananya Roy",
+        rollNumber: "220102014",
+        rating: 4,
+        comment: "Courts are well maintained. Make sure to bring your own non-marking indoor shoes!",
+        images: [],
+        date: "2026-08-22"
+      },
+      {
+        id: "rev_3",
+        facilityId: "sac-gymnasium",
+        studentName: "Vikramaditya Das",
+        rollNumber: "200103045",
+        rating: 5,
+        comment: "Great variety of free weights and cardio equipment. Clean environment.",
+        images: ["https://images.unsplash.com/photo-1534438327276-14e5300c3a48?q=80&w=600&auto=format&fit=crop"],
+        date: "2026-08-18"
+      },
+      {
+        id: "rev_4",
+        facilityId: "main-football-ground",
+        studentName: "Priyanjali Borgohain",
+        rollNumber: "220108012",
+        rating: 5,
+        comment: "Floodlights are super bright for late evening practice sessions under the stars!",
+        images: ["https://images.unsplash.com/photo-1508098682722-e99c43a406b2?q=80&w=600&auto=format&fit=crop"],
+        date: "2026-08-23"
+      }
+    ];
+
+    for (const r of INITIAL_REVIEWS) {
+      await query.run(
+        `INSERT INTO reviews (id, facilityId, studentName, rollNumber, rating, comment, images, date) 
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
+        [r.id, r.facilityId, r.studentName, r.rollNumber, r.rating, r.comment, JSON.stringify(r.images), r.date]
+      );
+    }
+  }
+
+  // Seed default bookings if bookings table is empty
+  const bookingCount = await query.get("SELECT COUNT(*) as count FROM bookings");
+  if (parseInt(bookingCount.count, 10) === 0) {
+    console.log("Seeding initial booking data...");
+    const todayStr = new Date().toISOString().split("T")[0];
+    await query.run(
+      `INSERT INTO bookings (id, facilityId, facilityName, location, dateKey, slotId, startLabel, endLabel, rollNumber, studentName, hostel, status, bookedAt)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, 'CONFIRMED', $12)`,
+      [
+        "bk_101",
+        "badminton-hall",
+        "Badminton Hall",
+        "SAC Indoor Hall, First Floor",
+        todayStr,
+        "7pm",
+        "7:00 pm",
+        "8:00 pm",
+        "220101045",
+        "Abhyudaya Shukla",
+        "Lohit",
+        new Date().toISOString()
+      ]
+    );
+
+    // Seed default waitlist corresponding to the booking above
+    await query.run(
+      `INSERT INTO waitlists (id, facilityId, facilityName, location, dateKey, slotId, startLabel, endLabel, rollNumber, studentName, hostel, queuePosition, status, createdAt)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, 'WAITLISTED', $13)`,
+      [
+        "wl_501",
+        "badminton-hall",
+        "Badminton Hall",
+        "SAC Indoor Hall, First Floor",
+        todayStr,
+        "7pm",
+        "7:00 pm",
+        "8:00 pm",
+        "210102033",
+        "Devansh Mehta",
+        "Kapili",
+        1,
+        new Date().toISOString()
+      ]
+    );
+  }
+}
+
+export default pool;
