@@ -1,6 +1,7 @@
 import { useState, useEffect, createContext, useContext } from "react";
 
 const AUTH_STORAGE_KEY = "playfield_iitg_auth_user";
+const BACKEND_URL = "http://localhost:8000";
 
 const AuthContext = createContext(null);
 
@@ -26,29 +27,65 @@ export function AuthProvider({ children }) {
     }
   }, [user]);
 
-  const loginAsStudent = ({ name, rollNumber, hostel }) => {
-    const studentUser = {
+  const loginAsStudent = async ({ name, rollNumber, hostel }) => {
+    try {
+      // Call Node.js Backend API
+      const res = await fetch(`${BACKEND_URL}/api/auth/student-login`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name, rollNumber, hostel })
+      });
+
+      const data = await res.json();
+      if (data.success && data.user) {
+        setUser(data.user);
+        return data.user;
+      }
+    } catch (err) {
+      console.warn("Backend auth offline, using local session fallback:", err);
+    }
+
+    // Fallback if backend is connecting
+    const fallbackUser = {
       role: "student",
       name: name.trim(),
       rollNumber: rollNumber.trim(),
       hostel: hostel || "Lohit",
       signedInAt: new Date().toISOString()
     };
-    setUser(studentUser);
-    return studentUser;
+    setUser(fallbackUser);
+    return fallbackUser;
   };
 
-  const loginAsAdmin = (passcode) => {
-    if (passcode === "iitgadmin" || passcode === "123456" || passcode === "admin") {
-      const adminUser = {
-        role: "admin",
-        name: "IITG Gymkhana Admin",
-        signedInAt: new Date().toISOString()
-      };
-      setUser(adminUser);
-      return { success: true, user: adminUser };
+  const loginAsAdmin = async (passcode) => {
+    try {
+      // Call Node.js Backend API
+      const res = await fetch(`${BACKEND_URL}/api/auth/admin-login`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ passcode })
+      });
+
+      const data = await res.json();
+      if (data.success && data.user) {
+        setUser(data.user);
+        return { success: true, user: data.user };
+      } else {
+        return { success: false, error: data.error || "Invalid Admin Passcode" };
+      }
+    } catch (err) {
+      console.warn("Backend auth offline, checking local passcode:", err);
+      if (passcode === "iitgadmin" || passcode === "123456" || passcode === "admin") {
+        const fallbackAdmin = {
+          role: "admin",
+          name: "IITG Gymkhana Admin",
+          signedInAt: new Date().toISOString()
+        };
+        setUser(fallbackAdmin);
+        return { success: true, user: fallbackAdmin };
+      }
+      return { success: false, error: "Invalid Admin Passcode (Try 'iitgadmin' or '123456')" };
     }
-    return { success: false, error: "Invalid Admin Passcode (Try 'iitgadmin' or '123456')" };
   };
 
   const logout = () => {

@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { X, MapPin, Mail, Phone, Clock, Send, CheckCircle2, Building2 } from "lucide-react";
+import { X, Mail, Phone, Clock, Send, CheckCircle2, Building2 } from "lucide-react";
 import { useAuth } from "../hooks/useAuth";
 
 export default function ContactModal({ onClose }) {
@@ -22,7 +22,6 @@ export default function ContactModal({ onClose }) {
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-4 backdrop-blur-md animate-fadeIn">
       <div className="relative w-full max-w-xl overflow-hidden rounded-2xl border border-surface-border bg-surface shadow-2xl">
-        {/* Header */}
         <div className="flex items-center justify-between border-b border-surface-border p-5 bg-surface-hover/40">
           <div>
             <span className="text-[11px] font-bold tracking-wider text-accent uppercase">
@@ -41,7 +40,6 @@ export default function ContactModal({ onClose }) {
         </div>
 
         <div className="p-6 grid grid-cols-1 md:grid-cols-2 gap-6">
-          {/* Left Column: Campus Info */}
           <div className="space-y-4 text-xs text-muted">
             <div className="flex items-start gap-3">
               <Building2 className="h-4 w-4 text-accent shrink-0 mt-0.5" />
@@ -83,7 +81,6 @@ export default function ContactModal({ onClose }) {
             </div>
           </div>
 
-          {/* Right Column: Query Form */}
           <div>
             {submitted ? (
               <div className="flex flex-col items-center justify-center h-full py-8 text-center space-y-3">

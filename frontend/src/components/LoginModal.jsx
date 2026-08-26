@@ -19,14 +19,12 @@ const HOSTELS = [
 
 export default function LoginModal({ onClose, onSuccess, initialTab = "student", subtitle = null }) {
   const { loginAsStudent, loginAsAdmin } = useAuth();
-  const [activeTab, setActiveTab] = useState(initialTab); // "student" | "admin"
+  const [activeTab, setActiveTab] = useState(initialTab);
 
-  // Student Form State
   const [studentName, setStudentName] = useState("");
   const [rollNumber, setRollNumber] = useState("");
   const [hostel, setHostel] = useState("Lohit");
 
-  // Admin Form State
   const [passcode, setPasscode] = useState("");
   const [adminError, setAdminError] = useState("");
 
@@ -60,7 +58,6 @@ export default function LoginModal({ onClose, onSuccess, initialTab = "student",
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-4 backdrop-blur-md animate-fadeIn">
       <div className="relative w-full max-w-md overflow-hidden rounded-2xl border border-surface-border bg-surface shadow-2xl">
-        {/* Header */}
         <div className="flex items-center justify-between border-b border-surface-border p-5 bg-surface-hover/40">
           <div>
             <span className="text-[11px] font-bold tracking-wider text-accent uppercase">
@@ -83,7 +80,6 @@ export default function LoginModal({ onClose, onSuccess, initialTab = "student",
           </button>
         </div>
 
-        {/* Role Toggle Tabs */}
         <div className="grid grid-cols-2 gap-1 p-2 m-4 rounded-xl bg-base border border-surface-border">
           <button
             type="button"
@@ -116,7 +112,6 @@ export default function LoginModal({ onClose, onSuccess, initialTab = "student",
           </button>
         </div>
 
-        {/* Student Form */}
         {activeTab === "student" && (
           <form onSubmit={handleStudentSubmit} className="px-5 pb-6 space-y-4">
             <div>
@@ -182,7 +177,6 @@ export default function LoginModal({ onClose, onSuccess, initialTab = "student",
           </form>
         )}
 
-        {/* Admin Form */}
         {activeTab === "admin" && (
           <form onSubmit={handleAdminSubmit} className="px-5 pb-6 space-y-4">
             <div>

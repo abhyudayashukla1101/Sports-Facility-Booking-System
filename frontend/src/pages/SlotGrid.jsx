@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useParams, Link } from "react-router-dom";
-import { MapPin, Users, Clock, Star, ArrowLeft, CheckCircle, Info, MessageSquarePlus, User, X, ZoomIn } from "lucide-react";
+import { MapPin, Users, Clock, Star, ArrowLeft, CheckCircle, Info, MessageSquarePlus, User, X, ZoomIn, Hourglass } from "lucide-react";
 import { useFacility } from "../hooks/useFacilities";
 import { getUpcomingDates, buildFacilitySlots } from "../data/facilities";
 import { useBookings } from "../hooks/useBookings";
@@ -9,17 +9,19 @@ import { useReviews } from "../hooks/useReviews";
 import BookingModal from "../components/BookingModal";
 import LoginModal from "../components/LoginModal";
 import ReviewModal from "../components/ReviewModal";
+import WaitlistModal from "../components/WaitlistModal";
 
 export default function SlotGrid() {
   const { id } = useParams();
   const { data: facility, isLoading } = useFacility(id);
-  const { addBooking, isSlotBooked } = useBookings();
+  const { addBooking, isSlotBooked, joinWaitlist, cancelWaitlist, getWaitlistQueueCount, getUserWaitlistEntry } = useBookings();
   const { user } = useAuth();
   const { getReviewsForFacility, getAverageRating, addReview } = useReviews();
 
   const dates = getUpcomingDates();
   const [selectedDate, setSelectedDate] = useState(dates[0]);
   const [selectedSlotForBooking, setSelectedSlotForBooking] = useState(null);
+  const [selectedSlotForWaitlist, setSelectedSlotForWaitlist] = useState(null);
   const [showLoginPrompt, setShowLoginPrompt] = useState(false);
   const [showReviewModal, setShowReviewModal] = useState(false);
   const [lightboxImage, setLightboxImage] = useState(null);
@@ -64,21 +66,45 @@ export default function SlotGrid() {
   const openCount = slots.filter((s) => s.status === "available").length;
 
   const handleSlotClick = (slot) => {
-    if (slot.status !== "available") return;
+    if (slot.status === "passed") return;
 
-    if (!user) {
-      setPendingSlot(slot);
-      setShowLoginPrompt(true);
+    if (slot.status === "available") {
+      if (!user) {
+        setPendingSlot(slot);
+        setShowLoginPrompt(true);
+        return;
+      }
+      setSelectedSlotForBooking(slot);
       return;
     }
 
-    setSelectedSlotForBooking(slot);
+    // Overbooked / BOOKED slot -> Waitlist flow
+    if (slot.status === "booked") {
+      if (!user) {
+        setPendingSlot(slot);
+        setShowLoginPrompt(true);
+        return;
+      }
+
+      const existingWaitlist = getUserWaitlistEntry(facility.id, selectedDate.dateKey, slot.id, user.rollNumber);
+      if (existingWaitlist) {
+        setToastMessage(`You are already in queue (Position #${existingWaitlist.queuePosition}) for this slot.`);
+        setTimeout(() => setToastMessage(null), 4000);
+        return;
+      }
+
+      setSelectedSlotForWaitlist(slot);
+    }
   };
 
   const handleLoginSuccess = () => {
     setShowLoginPrompt(false);
     if (pendingSlot) {
-      setSelectedSlotForBooking(pendingSlot);
+      if (pendingSlot.status === "available") {
+        setSelectedSlotForBooking(pendingSlot);
+      } else if (pendingSlot.status === "booked") {
+        setSelectedSlotForWaitlist(pendingSlot);
+      }
       setPendingSlot(null);
     }
   };
@@ -101,6 +127,28 @@ export default function SlotGrid() {
       `Slot locked! ${selectedSlotForBooking.startLabel} - ${selectedSlotForBooking.endLabel} booked for Roll No. ${studentDetails.rollNumber}`
     );
     setSelectedSlotForBooking(null);
+
+    setTimeout(() => setToastMessage(null), 5000);
+  };
+
+  const handleWaitlistConfirm = (studentDetails) => {
+    const entry = joinWaitlist({
+      facilityId: facility.id,
+      facilityName: facility.name,
+      location: facility.location,
+      dateKey: selectedDate.dateKey,
+      slotId: selectedSlotForWaitlist.id,
+      startLabel: selectedSlotForWaitlist.startLabel,
+      endLabel: selectedSlotForWaitlist.endLabel,
+      studentName: studentDetails.studentName,
+      rollNumber: studentDetails.rollNumber,
+      hostel: studentDetails.hostel
+    });
+
+    setToastMessage(
+      `Joined waitlist! You are Position #${entry.queuePosition} in line for ${selectedSlotForWaitlist.startLabel} slot.`
+    );
+    setSelectedSlotForWaitlist(null);
 
     setTimeout(() => setToastMessage(null), 5000);
   };
@@ -192,10 +240,27 @@ export default function SlotGrid() {
           {/* Left Column: Date Selector & Slot Grid */}
           <div className="lg:col-span-2 space-y-8">
             <div>
-              <h2 className="font-display text-2xl font-bold text-white">Pick a slot</h2>
-              <p className="mt-1 text-sm font-medium text-muted">
-                <span className="text-available font-bold">{openCount} slots open</span> on this day
-              </p>
+              <div className="flex flex-wrap items-baseline justify-between gap-2">
+                <div>
+                  <h2 className="font-display text-2xl font-bold text-white">Pick a slot</h2>
+                  <p className="mt-1 text-sm font-medium text-muted">
+                    <span className="text-available font-bold">{openCount} slots open</span> on this day
+                  </p>
+                </div>
+
+                {/* Status Legend Bar */}
+                <div className="flex flex-wrap items-center gap-3 text-xs font-semibold text-muted bg-surface/60 border border-surface-border/60 rounded-full px-4 py-1.5">
+                  <span className="flex items-center gap-1.5">
+                    <span className="h-2 w-2 rounded-full bg-available" /> Available
+                  </span>
+                  <span className="flex items-center gap-1.5">
+                    <span className="h-2 w-2 rounded-full bg-booked" /> Booked
+                  </span>
+                  <span className="flex items-center gap-1 text-accent font-bold">
+                    <Hourglass className="h-3 w-3" /> Join Waitlist
+                  </span>
+                </div>
+              </div>
 
               {/* Date Selector Row */}
               <div className="mt-5 flex gap-2.5 overflow-x-auto pb-2 scrollbar-none">
@@ -232,6 +297,8 @@ export default function SlotGrid() {
                 const isPassed = slot.status === "passed";
                 const isBooked = slot.status === "booked";
                 const isAvailable = slot.status === "available";
+                const queueCount = getWaitlistQueueCount(facility.id, selectedDate.dateKey, slot.id);
+                const userWaitlist = getUserWaitlistEntry(facility.id, selectedDate.dateKey, slot.id, user?.rollNumber);
 
                 return (
                   <div
@@ -241,7 +308,9 @@ export default function SlotGrid() {
                       isPassed
                         ? "border-surface-border/40 bg-surface/30 opacity-40 cursor-not-allowed"
                         : isBooked
-                        ? "border-booked/40 bg-booked/5 cursor-not-allowed"
+                        ? userWaitlist
+                          ? "border-accent/50 bg-accent/5 hover:border-accent cursor-pointer shadow-md shadow-accent/10"
+                          : "border-booked/40 bg-booked/5 hover:border-booked hover:bg-surface-hover cursor-pointer shadow-md hover:shadow-booked/10"
                         : "border-surface-border bg-surface hover:border-available/60 hover:bg-surface-hover cursor-pointer shadow-md hover:shadow-available/5"
                     }`}
                   >
@@ -254,16 +323,58 @@ export default function SlotGrid() {
                       </div>
                     </div>
 
-                    <div className="mt-4">
+                    <div className="mt-4 flex flex-col gap-1">
                       {isPassed && (
                         <span className="text-[11px] font-bold text-muted uppercase tracking-wider">
                           PASSED
                         </span>
                       )}
                       {isBooked && (
-                        <span className="inline-block rounded-full bg-booked/15 border border-booked/30 px-2.5 py-0.5 text-[10px] font-bold text-booked uppercase tracking-wider">
-                          BOOKED
-                        </span>
+                        <div className="w-full space-y-2 mt-1">
+                          <div className="flex items-center justify-between">
+                            <span className="inline-block rounded-full bg-booked/20 border border-booked/40 px-2.5 py-0.5 text-[10px] font-extrabold text-booked uppercase tracking-wider">
+                              BOOKED
+                            </span>
+                            {queueCount > 0 && (
+                              <span className={`text-[10px] font-extrabold ${userWaitlist ? "text-accent" : "text-booked"}`}>
+                                {queueCount} in queue
+                              </span>
+                            )}
+                          </div>
+
+                          {userWaitlist ? (
+                            /* TURN YELLOW AFTER JOINING WAITLIST + LEAVE WAITLIST OPTION */
+                            <div className="space-y-1.5">
+                              <div className="flex items-center justify-center gap-1.5 rounded-xl border border-accent bg-accent px-3 py-1.5 text-xs font-extrabold text-accent-foreground shadow-md animate-fadeIn">
+                                <Hourglass className="h-3.5 w-3.5" /> Waitlist Position #{userWaitlist.queuePosition}
+                              </div>
+                              <button
+                                type="button"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  cancelWaitlist(userWaitlist.id);
+                                  setToastMessage("You left the waitlist for this slot.");
+                                  setTimeout(() => setToastMessage(null), 3000);
+                                }}
+                                className="w-full flex items-center justify-center gap-1 py-0.5 text-[11px] font-bold text-muted hover:text-booked transition group/leave"
+                              >
+                                <X className="h-3 w-3 group-hover/leave:scale-110" /> Leave Waitlist
+                              </button>
+                            </div>
+                          ) : (
+                            /* STAY RED BEFORE JOINING WAITLIST */
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleSlotClick(slot);
+                              }}
+                              className="w-full flex items-center justify-center gap-1.5 rounded-xl border border-booked/50 bg-booked/15 text-booked hover:bg-booked hover:text-white px-3 py-2 text-xs font-bold shadow-md transition active:scale-95"
+                            >
+                              <Hourglass className="h-3.5 w-3.5" /> Join Waitlist
+                            </button>
+                          )}
+                        </div>
                       )}
                       {isAvailable && (
                         <span className="inline-block rounded-full bg-available/15 border border-available/30 px-2.5 py-0.5 text-[10px] font-bold text-available uppercase tracking-wider group-hover:bg-available group-hover:text-base transition">
@@ -343,7 +454,6 @@ export default function SlotGrid() {
                         "{rev.comment}"
                       </p>
 
-                      {/* Photo Attachments Grid (Amazon / Flipkart Style) */}
                       {rev.images && rev.images.length > 0 && (
                         <div className="pl-10 pt-1 flex flex-wrap gap-2">
                           {rev.images.map((imgSrc, imgIdx) => (
@@ -395,10 +505,10 @@ export default function SlotGrid() {
             <div className="rounded-2xl border border-surface-border/60 bg-base/50 p-5 text-xs text-muted space-y-2">
               <div className="flex items-center gap-2 text-accent font-semibold">
                 <Info className="h-4 w-4 shrink-0" />
-                <span>IIT Guwahati Gymkhana Policy</span>
+                <span>IIT Guwahati Queue Policy</span>
               </div>
               <p className="leading-relaxed">
-                Authentication required before booking. Slots open 7 days in advance. Please cancel at least 1 hour prior if you cannot attend.
+                If a slot is booked, you can join the queue. When the booking is cancelled, Position #1 on the waitlist is automatically promoted to Confirmed.
               </p>
             </div>
           </div>
@@ -426,6 +536,18 @@ export default function SlotGrid() {
           dateObj={selectedDate}
           onClose={() => setSelectedSlotForBooking(null)}
           onConfirm={handleBookingConfirm}
+        />
+      )}
+
+      {/* Waitlist Modal */}
+      {selectedSlotForWaitlist && (
+        <WaitlistModal
+          facility={facility}
+          slot={selectedSlotForWaitlist}
+          dateObj={selectedDate}
+          queueCount={getWaitlistQueueCount(facility.id, selectedDate.dateKey, selectedSlotForWaitlist.id)}
+          onClose={() => setSelectedSlotForWaitlist(null)}
+          onConfirm={handleWaitlistConfirm}
         />
       )}
 

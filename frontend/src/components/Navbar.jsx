@@ -14,7 +14,6 @@ export default function Navbar() {
     <>
       <header className="sticky top-0 z-30 border-b border-surface-border bg-base/90 backdrop-blur-md">
         <div className="mx-auto flex h-16 max-w-7xl items-center justify-between px-4 sm:px-6">
-          {/* Logo */}
           <NavLink to="/" className="flex items-center gap-2.5 group">
             <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-accent text-accent-foreground shadow-md shadow-accent/10 transition group-hover:scale-105">
               <Zap className="h-5 w-5" fill="currentColor" strokeWidth={0} />
@@ -29,7 +28,6 @@ export default function Navbar() {
             </span>
           </NavLink>
 
-          {/* Navigation links: Facilities, My Bookings, Contact Us */}
           <nav className="hidden items-center gap-1 rounded-full bg-surface/90 border border-surface-border/50 p-1.5 sm:flex">
             <NavLink
               to="/"
@@ -66,7 +64,6 @@ export default function Navbar() {
               <Mail className="h-3.5 w-3.5" /> Contact us
             </button>
 
-            {/* Dynamic Admin Link when logged in as Admin */}
             {isAdmin && (
               <NavLink
                 to="/admin"
@@ -83,7 +80,6 @@ export default function Navbar() {
             )}
           </nav>
 
-          {/* User Profile / Sign in Button */}
           <div className="flex items-center gap-3">
             {user ? (
               <div className="flex items-center gap-3">
@@ -122,12 +118,10 @@ export default function Navbar() {
         </div>
       </header>
 
-      {/* Login Modal */}
       {showLoginModal && (
         <LoginModal onClose={() => setShowLoginModal(false)} />
       )}
 
-      {/* Contact Us Modal */}
       {showContactModal && (
         <ContactModal onClose={() => setShowContactModal(false)} />
       )}

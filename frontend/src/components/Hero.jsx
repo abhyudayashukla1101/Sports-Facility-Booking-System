@@ -4,7 +4,6 @@ import StatCard from "./StatCard";
 export default function Hero({ facilityCount, searchValue, onSearchChange }) {
   return (
     <section className="relative overflow-hidden border-b border-surface-border bg-base min-h-[520px] flex items-center">
-      {/* Blurred Ground Background Overlay */}
       <div
         className="absolute inset-0 bg-cover bg-center opacity-40 blur-[3px] scale-105 transform transition-transform duration-700"
         style={{
@@ -14,7 +13,6 @@ export default function Hero({ facilityCount, searchValue, onSearchChange }) {
         aria-hidden="true"
       />
 
-      {/* Dark Vignette / Gradient Overlay */}
       <div
         className="absolute inset-0 bg-gradient-to-b from-base/60 via-base/80 to-base"
         aria-hidden="true"
@@ -39,7 +37,6 @@ export default function Hero({ facilityCount, searchValue, onSearchChange }) {
           Check live availability across cricket, football, basketball, tennis and more — then confirm a slot that can never be double-booked.
         </p>
 
-        {/* Search Bar */}
         <div className="mt-8 flex max-w-xl items-center gap-3 rounded-full border border-surface-border bg-surface/90 py-2 pl-5 pr-2 backdrop-blur-md shadow-2xl focus-within:border-accent/60 transition">
           <Search className="h-5 w-5 shrink-0 text-muted" />
           <input
@@ -54,7 +51,6 @@ export default function Hero({ facilityCount, searchValue, onSearchChange }) {
           </button>
         </div>
 
-        {/* Stats Row */}
         <div className="mt-10 flex max-w-2xl flex-wrap gap-4">
           <StatCard
             icon={Trophy}

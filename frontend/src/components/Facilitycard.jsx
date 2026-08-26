@@ -16,12 +16,10 @@ export default function FacilityCard({ facility }) {
         />
         <div className="absolute inset-0 bg-gradient-to-t from-surface via-transparent to-black/30 opacity-80" />
         
-        {/* Sport Tag */}
         <span className="absolute left-3 top-3 rounded-full bg-base/85 px-3 py-1 text-[11px] font-bold tracking-wider text-white backdrop-blur-md border border-white/10 uppercase">
           {facility.sport}
         </span>
 
-        {/* Rating Badge */}
         <span className="absolute right-3 top-3 flex items-center gap-1 rounded-full bg-accent px-2.5 py-1 text-[11px] font-extrabold text-accent-foreground shadow-md">
           <Star className="h-3 w-3 fill-current" strokeWidth={0} />
           {facility.rating}

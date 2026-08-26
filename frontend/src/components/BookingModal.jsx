@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { X, CheckCircle2, ShieldCheck, User, CreditCard, Building } from "lucide-react";
+import { X, CheckCircle2, ShieldCheck } from "lucide-react";
 import { useAuth } from "../hooks/useAuth";
 
 export default function BookingModal({ facility, slot, dateObj, onClose, onConfirm }) {
@@ -27,7 +27,6 @@ export default function BookingModal({ facility, slot, dateObj, onClose, onConfi
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-4 backdrop-blur-md animate-fadeIn">
       <div className="relative w-full max-w-md overflow-hidden rounded-2xl border border-surface-border bg-surface shadow-2xl">
-        {/* Header */}
         <div className="flex items-center justify-between border-b border-surface-border p-5 bg-surface-hover/50">
           <div>
             <span className="text-[11px] font-bold tracking-wider text-accent uppercase">
@@ -45,7 +44,6 @@ export default function BookingModal({ facility, slot, dateObj, onClose, onConfi
           </button>
         </div>
 
-        {/* Slot details pill */}
         <div className="m-5 rounded-xl border border-surface-border/60 bg-base/60 p-4">
           <div className="flex justify-between items-center text-sm">
             <span className="text-muted">Date:</span>
@@ -67,7 +65,6 @@ export default function BookingModal({ facility, slot, dateObj, onClose, onConfi
           </div>
         </div>
 
-        {/* User Info Confirmation Form */}
         <form onSubmit={handleSubmit} className="px-5 pb-6 space-y-4">
           <div className="rounded-xl border border-accent/20 bg-accent/5 p-3 text-xs text-white space-y-1">
             <div className="font-bold text-accent">Authenticated Student Profile:</div>

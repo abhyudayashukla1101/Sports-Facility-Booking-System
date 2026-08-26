@@ -1,5 +1,3 @@
-// Playfield IIT Guwahati Facilities Data Model
-
 export const SPORTS = [
   "All sports",
   "Badminton",
@@ -14,7 +12,6 @@ export const SPORTS = [
   "Volleyball"
 ];
 
-// Helper to generate upcoming 7 dates
 export function getUpcomingDates() {
   const dates = [];
   const days = ["SUN", "MON", "TUE", "WED", "THU", "FRI", "SAT"];
@@ -61,20 +58,26 @@ const TIME_SLOTS = [
 ];
 
 export function buildFacilitySlots(facilityId, dateKey, isToday) {
-  // Mock preset for available/booked/passed slots
+  const currentHour = new Date().getHours();
+
   return TIME_SLOTS.map((time, idx) => {
+    const slotStartHour = 6 + idx;
+    const slotEndHour = slotStartHour + 1;
+
     let status = "available";
 
     if (isToday) {
-      // First 13 slots passed (up to 7:00 pm) to match Lovable screenshot prototype
-      if (idx < 13) {
+      if (currentHour >= slotEndHour) {
         status = "passed";
       } else {
-        status = "available"; // 7-8pm, 8-9pm, 9-10pm available
+        if (slotStartHour === 19 || slotStartHour === 20 || (idx + facilityId.length) % 4 === 0) {
+          status = "booked";
+        } else {
+          status = "available";
+        }
       }
     } else {
-      // Future dates: random realistic mix of available and booked
-      if ((idx + facilityId.length) % 5 === 0) {
+      if ((idx + facilityId.length) % 4 === 0) {
         status = "booked";
       } else {
         status = "available";

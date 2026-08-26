@@ -20,7 +20,6 @@ export default function AnalyticsDashboard() {
         </h1>
       </div>
 
-      {/* KPI Cards */}
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <div className="rounded-2xl border border-surface-border bg-surface p-5 shadow-xl">
           <div className="flex items-center justify-between">
@@ -67,7 +66,6 @@ export default function AnalyticsDashboard() {
         </div>
       </div>
 
-      {/* Facilities Maintenance Control Table */}
       <div className="rounded-2xl border border-surface-border bg-surface overflow-hidden shadow-2xl">
         <div className="flex items-center justify-between border-b border-surface-border p-6 bg-surface-hover/30">
           <div>
