@@ -1,8 +1,9 @@
 import { useState } from "react";
 import { X, Clock, Users, ShieldAlert, CheckCircle2 } from "lucide-react";
 import { useAuth } from "../hooks/useAuth";
+import SmartAllocationWidget from "./SmartAllocationWidget";
 
-export default function WaitlistModal({ facility, slot, dateObj, queueCount, onClose, onConfirm }) {
+export default function WaitlistModal({ facility, slot, dateObj, queueCount, onClose, onConfirm, onBookAlternative }) {
   const { user } = useAuth();
   const [isSubmitting, setIsSubmitting] = useState(false);
   const position = queueCount + 1;
@@ -20,13 +21,13 @@ export default function WaitlistModal({ facility, slot, dateObj, queueCount, onC
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-4 backdrop-blur-md animate-fadeIn">
-      <div className="relative w-full max-w-md overflow-hidden rounded-2xl border border-surface-border bg-surface shadow-2xl">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-4 backdrop-blur-md animate-fadeIn overflow-y-auto">
+      <div className="relative w-full max-w-lg overflow-hidden rounded-2xl border border-surface-border bg-surface shadow-2xl my-8">
         {/* Header */}
         <div className="flex items-center justify-between border-b border-surface-border p-5 bg-surface-hover/50">
           <div>
             <span className="text-[11px] font-bold tracking-wider text-accent uppercase">
-              Slot Overbooked • Waitlist Queue
+              Slot Overbooked • Waitlist Queue & Alternatives
             </span>
             <h3 className="font-display text-xl font-bold text-white">
               {facility.name}
@@ -40,16 +41,28 @@ export default function WaitlistModal({ facility, slot, dateObj, queueCount, onC
           </button>
         </div>
 
-        <div className="p-5 space-y-4">
+        <div className="p-5 space-y-4 max-h-[80vh] overflow-y-auto">
+          {/* Smart Allocation Recommendation Engine */}
+          <SmartAllocationWidget
+            facilityId={facility.id}
+            dateKey={dateObj.dateKey}
+            slotId={slot.id}
+            onSelectRecommendation={(rec) => {
+              if (onBookAlternative) {
+                onBookAlternative(rec);
+              }
+            }}
+          />
+
           {/* Queue Position Pill */}
           <div className="flex items-center justify-between rounded-xl border border-accent/30 bg-accent/10 p-4">
             <div>
-              <span className="text-xs font-semibold text-muted block">Your Calculated Queue Spot:</span>
-              <span className="font-display text-2xl font-extrabold text-accent">
+              <span className="text-xs font-semibold text-muted block">Or Join Waitlist for Requested Slot:</span>
+              <span className="font-display text-xl font-extrabold text-accent">
                 Position #{position} in Line
               </span>
             </div>
-            <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-accent text-accent-foreground font-black text-lg">
+            <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-accent text-accent-foreground font-black text-base">
               #{position}
             </div>
           </div>
@@ -85,7 +98,7 @@ export default function WaitlistModal({ facility, slot, dateObj, queueCount, onC
 
           <div className="flex items-start gap-2 text-[11px] text-muted">
             <ShieldAlert className="h-4 w-4 text-accent shrink-0 mt-0.5" />
-            <span>If the current booking is cancelled, you will be automatically promoted to Confirmed status.</span>
+            <span>If the current booking is cancelled, you will be automatically promoted to Confirmed status via Twilio SMS & WhatsApp.</span>
           </div>
 
           <button

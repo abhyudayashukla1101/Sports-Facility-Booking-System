@@ -4,6 +4,7 @@ import { Zap, LogOut, User, ShieldCheck, Mail } from "lucide-react";
 import { useAuth } from "../hooks/useAuth";
 import LoginModal from "./LoginModal";
 import ContactModal from "./ContactModal";
+import NotificationCenter from "./NotificationCenter";
 
 export default function Navbar() {
   const { user, isAdmin, logout } = useAuth();
@@ -28,61 +29,63 @@ export default function Navbar() {
             </span>
           </NavLink>
 
-          <nav className="hidden items-center gap-1 rounded-full bg-surface/90 border border-surface-border/50 p-1.5 sm:flex">
-            <NavLink
-              to="/"
-              end
-              className={({ isActive }) =>
-                `rounded-full px-5 py-1.5 text-sm font-medium transition-all ${
-                  isActive
-                    ? "bg-surface-hover text-white shadow-sm"
-                    : "text-muted hover:text-white"
-                }`
-              }
-            >
-              Facilities
-            </NavLink>
-
-            <NavLink
-              to="/bookings"
-              className={({ isActive }) =>
-                `rounded-full px-5 py-1.5 text-sm font-medium transition-all ${
-                  isActive
-                    ? "bg-surface-hover text-white shadow-sm"
-                    : "text-muted hover:text-white"
-                }`
-              }
-            >
-              My bookings
-            </NavLink>
-
-            <button
-              type="button"
-              onClick={() => setShowContactModal(true)}
-              className="rounded-full px-5 py-1.5 text-sm font-medium text-muted hover:text-white transition-all flex items-center gap-1.5"
-            >
-              <Mail className="h-3.5 w-3.5" /> Contact us
-            </button>
-
-            {isAdmin && (
+          {!isAdmin && (
+            <nav className="hidden items-center gap-1 rounded-full bg-surface/90 border border-surface-border/50 p-1.5 sm:flex">
               <NavLink
-                to="/admin"
+                to="/"
+                end
                 className={({ isActive }) =>
-                  `rounded-full px-4 py-1.5 text-xs font-bold transition-all flex items-center gap-1.5 ${
+                  `rounded-full px-4 py-1.5 text-xs font-semibold transition-all ${
                     isActive
-                      ? "bg-accent text-accent-foreground shadow-sm"
-                      : "text-accent hover:bg-accent/10"
+                      ? "bg-surface-hover text-white shadow-sm font-bold"
+                      : "text-muted hover:text-white"
                   }`
                 }
               >
-                <ShieldCheck className="h-3.5 w-3.5" /> Admin Dashboard
+                Home
               </NavLink>
-            )}
-          </nav>
+
+              <NavLink
+                to="/facilities"
+                className={({ isActive }) =>
+                  `rounded-full px-4 py-1.5 text-xs font-semibold transition-all ${
+                    isActive
+                      ? "bg-surface-hover text-white shadow-sm font-bold"
+                      : "text-muted hover:text-white"
+                  }`
+                }
+              >
+                Facilities
+              </NavLink>
+
+              <NavLink
+                to="/bookings"
+                className={({ isActive }) =>
+                  `rounded-full px-4 py-1.5 text-xs font-semibold transition-all ${
+                    isActive
+                      ? "bg-surface-hover text-white shadow-sm font-bold"
+                      : "text-muted hover:text-white"
+                  }`
+                }
+              >
+                My bookings
+              </NavLink>
+
+              <button
+                type="button"
+                onClick={() => setShowContactModal(true)}
+                className="rounded-full px-4 py-1.5 text-xs font-semibold text-muted hover:text-white transition-all flex items-center gap-1.5"
+              >
+                <Mail className="h-3.5 w-3.5" /> Contact us
+              </button>
+            </nav>
+          )}
 
           <div className="flex items-center gap-3">
             {user ? (
               <div className="flex items-center gap-3">
+                {/* Notification Center */}
+                <NotificationCenter />
                 <div className="hidden sm:flex flex-col items-end text-xs">
                   <span className="font-bold text-white flex items-center gap-1">
                     {user.role === "admin" ? (
@@ -109,9 +112,9 @@ export default function Navbar() {
             ) : (
               <button
                 onClick={() => setShowLoginModal(true)}
-                className="rounded-full bg-accent px-5 py-2 text-sm font-bold text-accent-foreground shadow-lg shadow-accent/20 transition hover:brightness-110 active:scale-95"
+                className="rounded-full bg-accent px-5 py-2 text-xs font-bold text-accent-foreground shadow-lg shadow-accent/20 transition hover:brightness-110 active:scale-95"
               >
-                Sign in
+                Sign in / Register
               </button>
             )}
           </div>

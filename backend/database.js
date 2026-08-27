@@ -1,49 +1,117 @@
+import sqlite3 from "sqlite3";
+import path from "path";
+import fs from "fs";
+import { fileURLToPath } from "url";
 import pg from "pg";
 import dotenv from "dotenv";
 
 dotenv.config();
 
-const { Pool } = pg;
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+const dbPath = path.join(__dirname, "sports_booking.db");
 
-// Connection Pool Configuration
-const pool = new Pool({
-  host: process.env.PGHOST || "localhost",
-  port: parseInt(process.env.PGPORT || "5432", 10),
-  user: process.env.PGUSER || "postgres",
-  password: process.env.PGPASSWORD || "postgres",
-  database: process.env.PGDATABASE || "sports_booking"
-});
+let isPg = false;
+let pool = null;
+let sqliteDb = null;
 
-pool.on("connect", () => {
-  console.log("Connected to the PostgreSQL database");
-});
+// Convert PostgreSQL $1, $2 parameter placeholders to SQLite ? placeholders
+function toSqliteSql(sql) {
+  return sql.replace(/\$\d+/g, "?");
+}
 
-pool.on("error", (err) => {
-  console.error("PostgreSQL pool connection error:", err.message);
-});
-
-// Promisified SQL query helpers mapping to previous SQLite signatures
+// Promisified SQL query interface supporting both SQLite and PostgreSQL
 export const query = {
   async run(sql, params = []) {
-    const result = await pool.query(sql, params);
-    return { changes: result.rowCount };
+    if (isPg && pool) {
+      const result = await pool.query(sql, params);
+      return { changes: result.rowCount };
+    }
+    return new Promise((resolve, reject) => {
+      sqliteDb.run(toSqliteSql(sql), params, function (err) {
+        if (err) reject(err);
+        else resolve({ changes: this.changes });
+      });
+    });
   },
+
   async get(sql, params = []) {
-    const result = await pool.query(sql, params);
-    return result.rows[0] || null;
+    if (isPg && pool) {
+      const result = await pool.query(sql, params);
+      return result.rows[0] || null;
+    }
+    return new Promise((resolve, reject) => {
+      sqliteDb.get(toSqliteSql(sql), params, (err, row) => {
+        if (err) reject(err);
+        else resolve(row || null);
+      });
+    });
   },
+
   async all(sql, params = []) {
-    const result = await pool.query(sql, params);
-    return result.rows;
+    if (isPg && pool) {
+      const result = await pool.query(sql, params);
+      return result.rows;
+    }
+    return new Promise((resolve, reject) => {
+      sqliteDb.all(toSqliteSql(sql), params, (err, rows) => {
+        if (err) reject(err);
+        else resolve(rows || []);
+      });
+    });
   },
+
   async exec(sql) {
-    await pool.query(sql);
+    if (isPg && pool) {
+      await pool.query(sql);
+      return;
+    }
+    return new Promise((resolve, reject) => {
+      sqliteDb.exec(sql, (err) => {
+        if (err) reject(err);
+        else resolve();
+      });
+    });
   }
 };
 
-// PostgreSQL Tables Schema Init
 export async function initDatabase() {
+  // Try PostgreSQL if explicitly requested in ENV
+  if (process.env.USE_POSTGRES === "true") {
+    try {
+      pool = new pg.Pool({
+        host: process.env.PGHOST || "localhost",
+        port: parseInt(process.env.PGPORT || "5432", 10),
+        user: process.env.PGUSER || "postgres",
+        password: process.env.PGPASSWORD || "postgres",
+        database: process.env.PGDATABASE || "sports_booking"
+      });
+      await pool.query("SELECT 1");
+      isPg = true;
+      console.log("Connected to PostgreSQL database");
+    } catch (pgErr) {
+      console.warn("PostgreSQL connection failed, falling back to SQLite:", pgErr.message);
+      isPg = false;
+      pool = null;
+    }
+  }
+
+  if (!isPg) {
+    sqliteDb = new sqlite3.Database(dbPath);
+    sqliteDb.run("PRAGMA foreign_keys = ON;");
+    console.log("Connected to SQLite database at:", dbPath);
+  }
+
   await query.exec(`
+    CREATE TABLE IF NOT EXISTS users (
+      rollNumber VARCHAR(255) PRIMARY KEY,
+      name VARCHAR(255) NOT NULL,
+      hostel VARCHAR(255) NOT NULL,
+      phone VARCHAR(255),
+      passcode VARCHAR(255) NOT NULL,
+      role VARCHAR(255) NOT NULL DEFAULT 'student',
+      createdAt VARCHAR(255) NOT NULL
+    );
+
     CREATE TABLE IF NOT EXISTS facilities (
       id VARCHAR(255) PRIMARY KEY,
       name VARCHAR(255) NOT NULL,
@@ -72,6 +140,7 @@ export async function initDatabase() {
       studentName VARCHAR(255) NOT NULL,
       hostel VARCHAR(255) NOT NULL,
       status VARCHAR(255) NOT NULL DEFAULT 'CONFIRMED',
+      attendanceStatus VARCHAR(255) NOT NULL DEFAULT 'PENDING',
       bookedAt VARCHAR(255) NOT NULL,
       promotedFromWaitlist INT DEFAULT 0,
       FOREIGN KEY (facilityId) REFERENCES facilities(id) ON DELETE CASCADE
@@ -102,15 +171,68 @@ export async function initDatabase() {
       rollNumber VARCHAR(255) NOT NULL,
       rating INT NOT NULL,
       comment TEXT NOT NULL,
-      images TEXT NOT NULL, -- JSON stringified array of image URLs
+      images TEXT NOT NULL,
       date VARCHAR(255) NOT NULL,
       FOREIGN KEY (facilityId) REFERENCES facilities(id) ON DELETE CASCADE
     );
+
+    CREATE TABLE IF NOT EXISTS maintenance_windows (
+      id VARCHAR(255) PRIMARY KEY,
+      facilityId VARCHAR(255) NOT NULL,
+      facilityName VARCHAR(255) NOT NULL,
+      startDate VARCHAR(255) NOT NULL,
+      endDate VARCHAR(255) NOT NULL,
+      reason TEXT NOT NULL,
+      slotIds TEXT NOT NULL,
+      createdAt VARCHAR(255) NOT NULL,
+      FOREIGN KEY (facilityId) REFERENCES facilities(id) ON DELETE CASCADE
+    );
+
+    CREATE TABLE IF NOT EXISTS event_approvals (
+      id VARCHAR(255) PRIMARY KEY,
+      facilityId VARCHAR(255) NOT NULL,
+      facilityName VARCHAR(255) NOT NULL,
+      studentName VARCHAR(255) NOT NULL,
+      rollNumber VARCHAR(255) NOT NULL,
+      eventName VARCHAR(255) NOT NULL,
+      dateKey VARCHAR(255) NOT NULL,
+      slotId VARCHAR(255) NOT NULL,
+      startLabel VARCHAR(255) NOT NULL,
+      endLabel VARCHAR(255) NOT NULL,
+      purpose TEXT NOT NULL,
+      status VARCHAR(255) NOT NULL DEFAULT 'PENDING',
+      requestedAt VARCHAR(255) NOT NULL,
+      processedAt VARCHAR(255),
+      rejectionReason TEXT,
+      FOREIGN KEY (facilityId) REFERENCES facilities(id) ON DELETE CASCADE
+    );
+
+    CREATE TABLE IF NOT EXISTS notifications (
+      id VARCHAR(255) PRIMARY KEY,
+      rollNumber VARCHAR(255) NOT NULL,
+      title VARCHAR(255) NOT NULL,
+      message TEXT NOT NULL,
+      type VARCHAR(255) NOT NULL,
+      isRead INT DEFAULT 0,
+      createdAt VARCHAR(255) NOT NULL
+    );
+
+    CREATE UNIQUE INDEX IF NOT EXISTS idx_unique_confirmed_booking 
+    ON bookings (facilityId, dateKey, slotId) 
+    WHERE status = 'CONFIRMED';
   `);
+
+  // Migration: Add attendanceStatus column if missing
+  try {
+    await query.run("ALTER TABLE bookings ADD COLUMN attendanceStatus VARCHAR(255) DEFAULT 'PENDING'");
+  } catch (mErr) {
+    // Ignore if column already exists
+  }
 
   // Seed default data if facilities table is empty
   const facilityCount = await query.get("SELECT COUNT(*) as count FROM facilities");
-  if (parseInt(facilityCount.count, 10) === 0) {
+  const fCount = parseInt(facilityCount ? facilityCount.count : 0, 10);
+  if (fCount === 0) {
     console.log("Seeding initial facility data...");
     const MOCK_FACILITIES = [
       {
@@ -268,7 +390,8 @@ export async function initDatabase() {
 
   // Seed default reviews if reviews table is empty
   const reviewCount = await query.get("SELECT COUNT(*) as count FROM reviews");
-  if (parseInt(reviewCount.count, 10) === 0) {
+  const rCount = parseInt(reviewCount ? reviewCount.count : 0, 10);
+  if (rCount === 0) {
     console.log("Seeding initial review data...");
     const INITIAL_REVIEWS = [
       {
@@ -324,7 +447,8 @@ export async function initDatabase() {
 
   // Seed default bookings if bookings table is empty
   const bookingCount = await query.get("SELECT COUNT(*) as count FROM bookings");
-  if (parseInt(bookingCount.count, 10) === 0) {
+  const bCount = parseInt(bookingCount ? bookingCount.count : 0, 10);
+  if (bCount === 0) {
     console.log("Seeding initial booking data...");
     const todayStr = new Date().toISOString().split("T")[0];
     await query.run(

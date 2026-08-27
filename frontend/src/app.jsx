@@ -9,6 +9,8 @@ import LoginModal from "./components/LoginModal";
 import { useState } from "react";
 import { ShieldAlert } from "lucide-react";
 
+import LandingPage from "./pages/LandingPage";
+
 function AdminRouteGuard() {
   const { isAdmin } = useAuth();
   const [showModal, setShowModal] = useState(false);
@@ -53,7 +55,8 @@ export default function App() {
         <Navbar />
         <main className="flex-1">
           <Routes>
-            <Route path="/" element={<FacilityList />} />
+            <Route path="/" element={<LandingPage />} />
+            <Route path="/facilities" element={<FacilityList />} />
             <Route path="/facilities/:id" element={<SlotGrid />} />
             <Route path="/bookings" element={<MyBookings />} />
             <Route path="/admin" element={<AdminRouteGuard />} />

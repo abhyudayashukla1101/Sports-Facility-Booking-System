@@ -11,11 +11,13 @@ import BookingModal from "../components/BookingModal";
 import LoginModal from "../components/LoginModal";
 import ReviewModal from "../components/ReviewModal";
 import WaitlistModal from "../components/WaitlistModal";
+import EventRequestModal from "../components/EventRequestModal";
+import { Trophy } from "lucide-react";
 
 export default function SlotGrid() {
   const { id } = useParams();
   const { data: facility, isLoading } = useFacility(id);
-  const { addBooking, joinWaitlist, cancelWaitlist } = useBookings();
+  const { bookings, addBooking, joinWaitlist, cancelWaitlist } = useBookings();
   const { user } = useAuth();
   const { getReviewsForFacility, getAverageRating, addReview } = useReviews(id);
 
@@ -29,6 +31,7 @@ export default function SlotGrid() {
   const [selectedSlotForWaitlist, setSelectedSlotForWaitlist] = useState(null);
   const [showLoginPrompt, setShowLoginPrompt] = useState(false);
   const [showReviewModal, setShowReviewModal] = useState(false);
+  const [showEventModal, setShowEventModal] = useState(false);
   const [lightboxImage, setLightboxImage] = useState(null);
   const [pendingSlot, setPendingSlot] = useState(null);
   const [toastMessage, setToastMessage] = useState(null);
@@ -53,11 +56,31 @@ export default function SlotGrid() {
     );
   }
 
+  const safeSlots = Array.isArray(slots) ? slots : [];
   const facilityReviews = getReviewsForFacility(facility.id);
   const avgRating = getAverageRating(facility.id, facility.rating);
-  const openCount = slots.filter((s) => s.status === "available").length;
+  const openCount = safeSlots.filter((s) => s.status === "available").length;
+
+  const isGlobalMaintenanceLock = Boolean(facility?.isMaintenanceLocked);
+  const isSelectedDateMaintenance = safeSlots.some((s) => s.status === "maintenance");
+  const showMaintenanceBanner = isGlobalMaintenanceLock || isSelectedDateMaintenance;
+
+  const maintenanceReasonText =
+    safeSlots.find((s) => s.maintenanceReason)?.maintenanceReason ||
+    (isGlobalMaintenanceLock
+      ? "Facility locked for scheduled maintenance by Gymkhana Admin"
+      : "Ground undergoing court repairs & resurfacing");
+
+  const reopeningDateText =
+    safeSlots.find((s) => s.closureEndDate)?.closureEndDate || "Next scheduled operating day";
 
   const handleSlotClick = (slot) => {
+    if (slot.status === "maintenance" || isGlobalMaintenanceLock) {
+      setToastMessage(`Ground under maintenance for this slot. Expected to re-open on: ${reopeningDateText}`);
+      setTimeout(() => setToastMessage(null), 4000);
+      return;
+    }
+
     if (slot.status === "passed") return;
 
     if (slot.status === "available") {
@@ -72,6 +95,19 @@ export default function SlotGrid() {
 
     // Overbooked / BOOKED slot -> Waitlist flow
     if (slot.status === "booked") {
+      const myBookingInList = bookings.find(
+        (b) =>
+          (b.facilityId === facility.id || b.facilityid === facility.id) &&
+          (b.dateKey === selectedDate.dateKey || b.datekey === selectedDate.dateKey) &&
+          (b.slotId === slot.id || b.slotid === slot.id) &&
+          b.status === "CONFIRMED"
+      );
+      if (slot.userBooking || myBookingInList) {
+        setToastMessage("You have reserved this slot! Check 'My Bookings' to manage your reservation.");
+        setTimeout(() => setToastMessage(null), 4000);
+        return;
+      }
+
       if (!user) {
         setPendingSlot(slot);
         setShowLoginPrompt(true);
@@ -207,15 +243,29 @@ export default function SlotGrid() {
             </Link>
           </div>
 
-          <div>
-            <span className="inline-block rounded-full bg-accent px-3.5 py-1 text-[11px] font-extrabold text-accent-foreground uppercase tracking-wider shadow-md">
-              {facility.sport}
-            </span>
-          </div>
+          <div className="flex flex-wrap items-center justify-between gap-4">
+            <div>
+              <span className="inline-block rounded-full bg-accent px-3.5 py-1 text-[11px] font-extrabold text-accent-foreground uppercase tracking-wider shadow-md">
+                {facility.sport}
+              </span>
+              <h1 className="mt-2 font-display text-4xl font-extrabold text-white sm:text-5xl">
+                {facility.name}
+              </h1>
+            </div>
 
-          <h1 className="mt-4 font-display text-4xl font-extrabold text-white sm:text-5xl">
-            {facility.name}
-          </h1>
+            <button
+              onClick={() => {
+                if (!user) {
+                  setShowLoginPrompt(true);
+                  return;
+                }
+                setShowEventModal(true);
+              }}
+              className="flex items-center gap-2 rounded-full border border-accent/40 bg-accent/10 px-4 py-2 text-xs font-bold text-accent hover:bg-accent hover:text-accent-foreground transition shadow-md"
+            >
+              <Trophy className="h-4 w-4" /> Request Event / Tournament Approval
+            </button>
+          </div>
 
           <div className="mt-4 flex flex-wrap items-center gap-x-6 gap-y-2 text-sm font-medium text-muted">
             <span className="flex items-center gap-2">
@@ -295,24 +345,85 @@ export default function SlotGrid() {
               </div>
             </div>
 
+            {/* Maintenance & Closure Banner */}
+            {showMaintenanceBanner && (
+              <div className="rounded-3xl border border-booked/40 bg-surface/90 p-6 shadow-2xl space-y-4 animate-fadeIn">
+                <div className="flex flex-col sm:flex-row items-center sm:items-start gap-4">
+                  <div className="flex h-16 w-16 shrink-0 items-center justify-center rounded-2xl bg-booked/15 border border-booked/30 text-3xl shadow-inner">
+                    👷‍♂️
+                  </div>
+                  <div className="text-center sm:text-left space-y-1">
+                    <div className="flex flex-wrap items-center justify-center sm:justify-start gap-2">
+                      <span className="font-display text-xl font-bold text-white">
+                        Ground Under Maintenance
+                      </span>
+                      <span className="rounded-full bg-booked/20 border border-booked/40 px-3 py-0.5 text-[10px] font-extrabold text-booked uppercase tracking-wider">
+                        🚧 UNDER MAINTENANCE
+                      </span>
+                    </div>
+                    <p className="text-xs text-muted font-medium italic">
+                      "We're sorry for the temporary pause! This ground is undergoing scheduled upkeep & repairs." 😔
+                    </p>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-2">
+                  <div className="rounded-xl border border-surface-border bg-base/60 p-3.5 space-y-1">
+                    <span className="text-[10px] font-extrabold text-muted uppercase tracking-wider block">
+                      Reason for Upkeep
+                    </span>
+                    <p className="text-xs font-semibold text-white">"{maintenanceReasonText}"</p>
+                  </div>
+                  <div className="rounded-xl border border-surface-border bg-base/60 p-3.5 space-y-1">
+                    <span className="text-[10px] font-extrabold text-muted uppercase tracking-wider block">
+                      Expected Re-Opening
+                    </span>
+                    <p className="text-xs font-semibold text-accent flex items-center gap-1.5">
+                      <Clock className="h-3.5 w-3.5" /> Accessible from: {reopeningDateText}
+                    </p>
+                  </div>
+                </div>
+
+                <div className="text-center sm:text-left text-[11px] font-semibold text-muted/80 pt-1 flex items-center gap-2">
+                  <Info className="h-3.5 w-3.5 text-accent shrink-0" />
+                  <span>
+                    Automated SMS & WhatsApp notifications will be sent to registered students as soon as the courts re-open.
+                  </span>
+                </div>
+              </div>
+            )}
+
             {/* 3-Column Slot Grid */}
             <div className="grid grid-cols-1 gap-3.5 sm:grid-cols-2 md:grid-cols-3">
-              {slots.map((slot) => {
-                const isPassed = slot.status === "passed";
-                const isBooked = slot.status === "booked";
-                const isAvailable = slot.status === "available";
+              {safeSlots.map((slot) => {
+                const isMaintenance = slot.status === "maintenance" || isGlobalMaintenanceLock;
+                const isPassed = slot.status === "passed" && !isMaintenance;
+                const isBooked = slot.status === "booked" && !isMaintenance;
+                const isAvailable = slot.status === "available" && !isMaintenance;
                 const queueCount = slot.queueCount ?? 0;
                 const userWaitlist = slot.userWaitlist ?? null;
+                const myBookingInList = (Array.isArray(bookings) ? bookings : []).find(
+                  (b) =>
+                    (b.facilityId === facility.id || b.facilityid === facility.id) &&
+                    (b.dateKey === selectedDate.dateKey || b.datekey === selectedDate.dateKey) &&
+                    (b.slotId === slot.id || b.slotid === slot.id) &&
+                    b.status === "CONFIRMED"
+                );
+                const isMyBooking = Boolean(slot.userBooking || myBookingInList);
 
                 return (
                   <div
                     key={slot.id}
                     onClick={() => handleSlotClick(slot)}
                     className={`group relative flex flex-col justify-between p-4 rounded-2xl border transition-all ${
-                      isPassed
+                      isMaintenance
+                        ? "border-booked/40 bg-booked/5 opacity-80 cursor-pointer hover:border-booked/60 shadow-sm"
+                        : isPassed
                         ? "border-surface-border/40 bg-surface/30 opacity-40 cursor-not-allowed"
                         : isBooked
-                        ? userWaitlist
+                        ? isMyBooking
+                          ? "border-available/50 bg-available/5 cursor-default shadow-md shadow-available/10"
+                          : userWaitlist
                           ? "border-accent/50 bg-accent/5 hover:border-accent cursor-pointer shadow-md shadow-accent/10"
                           : "border-booked/40 bg-booked/5 hover:border-booked hover:bg-surface-hover cursor-pointer shadow-md hover:shadow-booked/10"
                         : "border-surface-border bg-surface hover:border-available/60 hover:bg-surface-hover cursor-pointer shadow-md hover:shadow-available/5"
@@ -328,6 +439,16 @@ export default function SlotGrid() {
                     </div>
 
                     <div className="mt-4 flex flex-col gap-1">
+                      {isMaintenance && (
+                        <div>
+                          <span className="inline-flex items-center gap-1 rounded-full bg-booked/20 border border-booked/40 px-2 py-0.5 text-[10px] font-extrabold text-booked uppercase tracking-wider">
+                            🚧 UNDER MAINTENANCE
+                          </span>
+                          <p className="text-[10px] text-muted font-medium mt-1 truncate" title={slot.maintenanceReason || maintenanceReasonText}>
+                            {slot.maintenanceReason || maintenanceReasonText}
+                          </p>
+                        </div>
+                      )}
                       {isPassed && (
                         <span className="text-[11px] font-bold text-muted uppercase tracking-wider">
                           PASSED
@@ -336,8 +457,12 @@ export default function SlotGrid() {
                       {isBooked && (
                         <div className="w-full space-y-2 mt-1">
                           <div className="flex items-center justify-between">
-                            <span className="inline-block rounded-full bg-booked/20 border border-booked/40 px-2.5 py-0.5 text-[10px] font-extrabold text-booked uppercase tracking-wider">
-                              BOOKED
+                            <span className={`inline-block rounded-full border px-2.5 py-0.5 text-[10px] font-extrabold uppercase tracking-wider ${
+                              isMyBooking
+                                ? "bg-available/20 border-available/40 text-available"
+                                : "bg-booked/20 border-booked/40 text-booked"
+                            }`}>
+                              {isMyBooking ? "YOUR BOOKING" : "BOOKED"}
                             </span>
                             {queueCount > 0 && (
                               <span className={`text-[10px] font-extrabold ${userWaitlist ? "text-accent" : "text-booked"}`}>
@@ -346,7 +471,12 @@ export default function SlotGrid() {
                             )}
                           </div>
 
-                          {userWaitlist ? (
+                          {isMyBooking ? (
+                            /* IF CURRENT USER BOOKED THE SLOT: REMOVE JOIN WAITLIST BUTTON */
+                            <div className="flex items-center justify-center gap-1.5 rounded-xl border border-available/50 bg-available/15 px-3 py-2 text-xs font-extrabold text-available shadow-md">
+                              <CheckCircle className="h-3.5 w-3.5" /> Reserved by You
+                            </div>
+                          ) : userWaitlist ? (
                             /* TURN YELLOW AFTER JOINING WAITLIST + LEAVE WAITLIST OPTION */
                             <div className="space-y-1.5">
                               <div className="flex items-center justify-center gap-1.5 rounded-xl border border-accent bg-accent px-3 py-1.5 text-xs font-extrabold text-accent-foreground shadow-md animate-fadeIn">
@@ -366,7 +496,7 @@ export default function SlotGrid() {
                               </button>
                             </div>
                           ) : (
-                            /* STAY RED BEFORE JOINING WAITLIST */
+                            /* IF SOMEONE ELSE BOOKED THE SLOT: SHOW JOIN WAITLIST BUTTON */
                             <button
                               type="button"
                               onClick={(e) => {
@@ -543,7 +673,7 @@ export default function SlotGrid() {
         />
       )}
 
-      {/* Waitlist Modal */}
+      {/* Waitlist Modal & Smart Allocation */}
       {selectedSlotForWaitlist && (
         <WaitlistModal
           facility={facility}
@@ -552,6 +682,32 @@ export default function SlotGrid() {
           queueCount={selectedSlotForWaitlist.queueCount ?? 0}
           onClose={() => setSelectedSlotForWaitlist(null)}
           onConfirm={handleWaitlistConfirm}
+          onBookAlternative={async (rec) => {
+            setSelectedSlotForWaitlist(null);
+            if (!user) {
+              setShowLoginPrompt(true);
+              return;
+            }
+            try {
+              await addBooking({
+                facilityId: rec.facilityId,
+                facilityName: rec.facilityName,
+                location: rec.location,
+                dateKey: rec.dateKey,
+                slotId: rec.slotId,
+                startLabel: rec.startLabel,
+                endLabel: rec.endLabel,
+                studentName: user.name,
+                rollNumber: user.rollNumber,
+                hostel: user.hostel
+              });
+              setToastMessage(`Smart Allocation Success! Booked ${rec.startLabel} - ${rec.endLabel} at ${rec.facilityName}`);
+              setTimeout(() => setToastMessage(null), 5000);
+            } catch (err) {
+              setToastMessage(`Alternative booking failed: ${err.message}`);
+              setTimeout(() => setToastMessage(null), 5000);
+            }
+          }}
         />
       )}
 
@@ -561,6 +717,18 @@ export default function SlotGrid() {
           facility={facility}
           onClose={() => setShowReviewModal(false)}
           onSubmit={handleReviewSubmit}
+        />
+      )}
+
+      {/* Event Request Modal */}
+      {showEventModal && (
+        <EventRequestModal
+          facility={facility}
+          onClose={() => setShowEventModal(false)}
+          onSuccess={(msg) => {
+            setToastMessage(msg);
+            setTimeout(() => setToastMessage(null), 5000);
+          }}
         />
       )}
 

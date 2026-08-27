@@ -4,6 +4,8 @@ import path from "path";
 import fs from "fs";
 import { fileURLToPath } from "url";
 import { initDatabase, query } from "./database.js";
+import { dispatchNotification, handleWhatsAppWebhook } from "./services/twilioService.js";
+import { generateGroqAnalyticsInsights } from "./services/groqService.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const app = express();
@@ -12,6 +14,7 @@ const PORT = process.env.PORT || 8000;
 // Enable CORS and JSON parsing with base64 payload size limits
 app.use(cors());
 app.use(express.json({ limit: "15mb" }));
+app.use(express.urlencoded({ extended: true, limit: "15mb" }));
 
 // Ensure uploads folder exists
 const uploadsDir = path.join(__dirname, "public", "uploads");
@@ -49,11 +52,31 @@ function saveBase64Image(base64Str, rollNumber) {
 // ==========================================
 // 1. Auth Endpoints
 // ==========================================
-app.post("/api/auth/student-login", (req, res) => {
+app.post("/api/auth/student-login", async (req, res) => {
   const { name, rollNumber, hostel } = req.body;
   if (!name || !rollNumber) {
     return res.status(400).json({ success: false, error: "Name and Roll Number are required" });
   }
+
+  try {
+    const existingUser = await query.get("SELECT * FROM users WHERE rollNumber = $1", [rollNumber.trim()]);
+    if (existingUser) {
+      return res.json({
+        success: true,
+        user: {
+          role: "student",
+          name: existingUser.name,
+          rollNumber: existingUser.rollnumber || existingUser.rollNumber,
+          hostel: existingUser.hostel,
+          phone: existingUser.phone,
+          signedInAt: new Date().toISOString()
+        }
+      });
+    }
+  } catch (dbErr) {
+    console.warn("User lookup error:", dbErr.message);
+  }
+
   return res.json({
     success: true,
     user: {
@@ -64,6 +87,49 @@ app.post("/api/auth/student-login", (req, res) => {
       signedInAt: new Date().toISOString()
     }
   });
+});
+
+app.post("/api/auth/register", async (req, res) => {
+  const { name, rollNumber, hostel, phone, passcode } = req.body;
+  if (!name || !rollNumber || !hostel) {
+    return res.status(400).json({ success: false, error: "Name, Roll Number, and Hostel are required" });
+  }
+
+  try {
+    const existing = await query.get("SELECT rollNumber FROM users WHERE rollNumber = $1", [rollNumber.trim()]);
+    if (existing) {
+      return res.status(409).json({ success: false, error: "An account with this Roll Number already exists. Please sign in." });
+    }
+
+    const createdAt = new Date().toISOString();
+    await query.run(
+      `INSERT INTO users (rollNumber, name, hostel, phone, passcode, role, createdAt)
+       VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+      [
+        rollNumber.trim(),
+        name.trim(),
+        hostel,
+        phone || null,
+        passcode || "student123",
+        "student",
+        createdAt
+      ]
+    );
+
+    return res.json({
+      success: true,
+      user: {
+        role: "student",
+        name: name.trim(),
+        rollNumber: rollNumber.trim(),
+        hostel,
+        phone: phone || null,
+        signedInAt: createdAt
+      }
+    });
+  } catch (err) {
+    return res.status(500).json({ success: false, error: err.message });
+  }
 });
 
 app.post("/api/auth/admin-login", (req, res) => {
@@ -157,6 +223,18 @@ app.get("/api/facilities/:id/slots", async (req, res) => {
       [facilityId, date]
     );
 
+    // Fetch maintenance windows for this facility and date
+    const allWindows = await query.all(
+      "SELECT * FROM maintenance_windows WHERE facilityId = $1",
+      [facilityId]
+    );
+
+    const activeWindows = allWindows.filter((w) => {
+      const sDate = w.startdate || w.startDate;
+      const eDate = w.enddate || w.endDate;
+      return sDate <= date && eDate >= date;
+    });
+
     // Compute dates comparison
     const now = new Date();
     const todayStr = now.toISOString().split("T")[0];
@@ -164,10 +242,19 @@ app.get("/api/facilities/:id/slots", async (req, res) => {
 
     const slots = TIME_SLOTS.map((t) => {
       let status = "available";
+      let maintenanceReason = null;
 
-      // 1. Check if facility is locked for maintenance
-      if (isMaintenanceLocked) {
-        status = "passed"; // Blocks interaction
+      // 1. Check if facility is locked for maintenance or falls in a maintenance window
+      const matchedWindow = activeWindows.find((w) => {
+        const slotsList = JSON.parse(w.slotids || w.slotIds || "[]");
+        return slotsList.includes("all") || slotsList.includes(t.id);
+      });
+
+      if (isMaintenanceLocked || matchedWindow) {
+        status = "maintenance";
+        maintenanceReason = isMaintenanceLocked
+          ? "Facility locked for maintenance by Gymkhana Admin"
+          : matchedWindow.reason;
       }
       // 2. Check if date is in the past, or if today and hour passed
       else if (date < todayStr) {
@@ -176,20 +263,28 @@ app.get("/api/facilities/:id/slots", async (req, res) => {
         status = "passed";
       }
       // 3. Check if slot has a confirmed booking
-      else {
-        const isBooked = bookings.some((b) => (b.slotid || b.slotId) === t.id);
-        if (isBooked) {
-          status = "booked";
-        }
+      const slotBooking = bookings.find((b) => (b.slotid || b.slotId) === t.id) || null;
+      if (slotBooking && !isMaintenanceLocked && date >= todayStr) {
+        status = "booked";
       }
 
       // 4. Calculate queue count
       const slotWaitlists = waitlists.filter((w) => (w.slotid || w.slotId) === t.id);
       const queueCount = slotWaitlists.length;
 
-      // 5. Check if specific user is waitlisted
+      // 5. Check if specific user is waitlisted or booked
       const userWaitlist = rollNumber
         ? slotWaitlists.find((w) => (w.rollnumber || w.rollNumber) === rollNumber) || null
+        : null;
+
+      const userBooking = (rollNumber && slotBooking && ((slotBooking.rollnumber || slotBooking.rollNumber) === rollNumber))
+        ? {
+            id: slotBooking.id,
+            facilityId: slotBooking.facilityid || slotBooking.facilityId,
+            dateKey: slotBooking.datekey || slotBooking.dateKey,
+            slotId: slotBooking.slotid || slotBooking.slotId,
+            rollNumber: slotBooking.rollnumber || slotBooking.rollNumber
+          }
         : null;
 
       // Map back to camelCase for the frontend
@@ -217,8 +312,11 @@ app.get("/api/facilities/:id/slots", async (req, res) => {
         startLabel: t.startLabel,
         endLabel: t.endLabel,
         status,
+        maintenanceReason,
+        closureEndDate: matchedWindow ? (matchedWindow.enddate || matchedWindow.endDate) : null,
         queueCount,
-        userWaitlist: userWaitlistCamel
+        userWaitlist: userWaitlistCamel,
+        userBooking
       };
     });
 
@@ -244,6 +342,169 @@ app.get("/api/facilities/:id", async (req, res) => {
 });
 
 // ==========================================
+// Smart Allocation Recommendation Engine
+// ==========================================
+app.get("/api/recommendations", async (req, res) => {
+  const { facilityId, dateKey, slotId } = req.query;
+  if (!facilityId || !dateKey || !slotId) {
+    return res.status(400).json({ success: false, error: "facilityId, dateKey, and slotId are required" });
+  }
+
+  try {
+    const targetFacility = await query.get("SELECT * FROM facilities WHERE id = $1", [facilityId]);
+    if (!targetFacility) {
+      return res.status(404).json({ success: false, error: "Facility not found" });
+    }
+
+    const TIME_SLOTS = [
+      { id: "6am", startLabel: "6:00 am", endLabel: "7:00 am", startHour: 6, endHour: 7 },
+      { id: "7am", startLabel: "7:00 am", endLabel: "8:00 am", startHour: 7, endHour: 8 },
+      { id: "8am", startLabel: "8:00 am", endLabel: "9:00 am", startHour: 8, endHour: 9 },
+      { id: "9am", startLabel: "9:00 am", endLabel: "10:00 am", startHour: 9, endHour: 10 },
+      { id: "10am", startLabel: "10:00 am", endLabel: "11:00 am", startHour: 10, endHour: 11 },
+      { id: "11am", startLabel: "11:00 am", endLabel: "12:00 pm", startHour: 11, endHour: 12 },
+      { id: "12pm", startLabel: "12:00 pm", endLabel: "1:00 pm", startHour: 12, endHour: 13 },
+      { id: "1pm", startLabel: "1:00 pm", endLabel: "2:00 pm", startHour: 13, endHour: 14 },
+      { id: "2pm", startLabel: "2:00 pm", endLabel: "3:00 pm", startHour: 14, endHour: 15 },
+      { id: "3pm", startLabel: "3:00 pm", endLabel: "4:00 pm", startHour: 15, endHour: 16 },
+      { id: "4pm", startLabel: "4:00 pm", endLabel: "5:00 pm", startHour: 16, endHour: 17 },
+      { id: "5pm", startLabel: "5:00 pm", endLabel: "6:00 pm", startHour: 17, endHour: 18 },
+      { id: "6pm", startLabel: "6:00 pm", endLabel: "7:00 pm", startHour: 18, endHour: 19 },
+      { id: "7pm", startLabel: "7:00 pm", endLabel: "8:00 pm", startHour: 19, endHour: 20 },
+      { id: "8pm", startLabel: "8:00 pm", endLabel: "9:00 pm", startHour: 20, endHour: 21 },
+      { id: "9pm", startLabel: "9:00 pm", endLabel: "10:00 pm", startHour: 21, endHour: 22 }
+    ];
+
+    const targetSlotObj = TIME_SLOTS.find((s) => s.id === slotId) || TIME_SLOTS[0];
+    const targetHour = targetSlotObj.startHour;
+
+    const recommendations = [];
+
+    // Helper: Check if slot is available for given facility & date
+    const isSlotAvailable = async (facId, dKey, sId) => {
+      const fac = await query.get("SELECT * FROM facilities WHERE id = $1", [facId]);
+      if (!fac || fac.ismaintenancelocked || fac.isMaintenanceLocked) return false;
+
+      // Check maintenance windows
+      const windows = await query.all("SELECT * FROM maintenance_windows WHERE facilityId = $1", [facId]);
+      const isWindowLocked = windows.some((w) => {
+        const sD = w.startdate || w.startDate;
+        const eD = w.enddate || w.endDate;
+        const sList = JSON.parse(w.slotids || w.slotIds || "[]");
+        return sD <= dKey && eD >= dKey && (sList.includes("all") || sList.includes(sId));
+      });
+      if (isWindowLocked) return false;
+
+      // Check existing confirmed booking
+      const booking = await query.get(
+        "SELECT id FROM bookings WHERE facilityId = $1 AND dateKey = $2 AND slotId = $3 AND status = 'CONFIRMED'",
+        [facId, dKey, sId]
+      );
+      return !booking;
+    };
+
+    // 1. ADJACENT TIME SLOTS (Same facility & date)
+    const otherSlots = TIME_SLOTS.filter((s) => s.id !== slotId).sort(
+      (a, b) => Math.abs(a.startHour - targetHour) - Math.abs(b.startHour - targetHour)
+    );
+
+    for (const slotCandidate of otherSlots) {
+      if (recommendations.length >= 2) break;
+      const available = await isSlotAvailable(facilityId, dateKey, slotCandidate.id);
+      if (available) {
+        const hourDiff = Math.abs(slotCandidate.startHour - targetHour);
+        const direction = slotCandidate.startHour < targetHour ? "earlier" : "later";
+        recommendations.push({
+          id: `rec_adj_${slotCandidate.id}`,
+          type: "ADJACENT_SLOT",
+          facilityId,
+          facilityName: targetFacility.name,
+          sport: targetFacility.sport,
+          location: targetFacility.location,
+          dateKey,
+          slotId: slotCandidate.id,
+          startLabel: slotCandidate.startLabel,
+          endLabel: slotCandidate.endLabel,
+          matchScore: "95%",
+          reason: `${hourDiff}h ${direction} on ${targetFacility.name}`,
+          badgeText: `${hourDiff}h ${direction}`
+        });
+      }
+    }
+
+    // 2. ALTERNATIVE FACILITIES (Same sport / nearby grounds on same date & time)
+    const otherFacilities = await query.all(
+      "SELECT * FROM facilities WHERE id != $1 AND (LOWER(sport) = LOWER($2) OR LOWER(location) LIKE LOWER($3))",
+      [facilityId, targetFacility.sport, `%${targetFacility.location.split(',')[0]}%`]
+    );
+
+    for (const altFac of otherFacilities) {
+      if (recommendations.length >= 4) break;
+      const available = await isSlotAvailable(altFac.id, dateKey, slotId);
+      if (available) {
+        recommendations.push({
+          id: `rec_fac_${altFac.id}_${slotId}`,
+          type: "ALTERNATIVE_FACILITY",
+          facilityId: altFac.id,
+          facilityName: altFac.name,
+          sport: altFac.sport,
+          location: altFac.location,
+          dateKey,
+          slotId,
+          startLabel: targetSlotObj.startLabel,
+          endLabel: targetSlotObj.endLabel,
+          matchScore: "90%",
+          reason: `Same ${targetSlotObj.startLabel} slot at ${altFac.name}`,
+          badgeText: `Alt Ground`
+        });
+      }
+    }
+
+    // 3. UPCOMING DATES (Same facility & time slot tomorrow/day after)
+    const currDateObj = new Date(dateKey);
+    for (let offset = 1; offset <= 3; offset++) {
+      if (recommendations.length >= 5) break;
+      const nextDate = new Date(currDateObj);
+      nextDate.setDate(nextDate.getDate() + offset);
+      const nextDateKey = nextDate.toISOString().split("T")[0];
+
+      const available = await isSlotAvailable(facilityId, nextDateKey, slotId);
+      if (available) {
+        recommendations.push({
+          id: `rec_date_${nextDateKey}_${slotId}`,
+          type: "UPCOMING_DATE",
+          facilityId,
+          facilityName: targetFacility.name,
+          sport: targetFacility.sport,
+          location: targetFacility.location,
+          dateKey: nextDateKey,
+          slotId,
+          startLabel: targetSlotObj.startLabel,
+          endLabel: targetSlotObj.endLabel,
+          matchScore: "85%",
+          reason: `Same ${targetSlotObj.startLabel} slot on ${nextDateKey}`,
+          badgeText: offset === 1 ? "Tomorrow" : `In ${offset} days`
+        });
+      }
+    }
+
+    return res.json({
+      success: true,
+      requested: {
+        facilityId,
+        facilityName: targetFacility.name,
+        dateKey,
+        slotId,
+        startLabel: targetSlotObj.startLabel
+      },
+      recommendations
+    });
+  } catch (err) {
+    return res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// ==========================================
 // 3. Bookings & Collision-Prevention Engine
 // ==========================================
 app.post("/api/bookings", async (req, res) => {
@@ -254,7 +515,6 @@ app.post("/api/bookings", async (req, res) => {
   }
 
   try {
-    // Check if facility exists and is maintenance locked
     const facility = await query.get("SELECT * FROM facilities WHERE id = $1", [facilityId]);
     if (!facility) {
       return res.status(404).json({ success: false, error: "Facility not found" });
@@ -333,13 +593,22 @@ app.post("/api/bookings", async (req, res) => {
           rollNumber: b.rollnumber || b.rollNumber,
           studentName: b.studentname || b.studentName,
           hostel: b.hostel,
-          status: b.status,
-          bookedAt: b.bookedat || b.bookedAt
         }
       : null;
 
+    // Dispatch confirmation notification
+    dispatchNotification({
+      rollNumber,
+      title: "Slot Reserved! 🎾",
+      message: `Your booking for ${facility.name} on ${dateKey} (${labels.start} – ${labels.end}) is CONFIRMED. Ref: ${bookingId}`,
+      type: "CONFIRMATION"
+    });
+
     return res.json({ success: true, booking: bookingCamel });
   } catch (err) {
+    if (err.message && (err.message.includes("UNIQUE") || err.message.includes("constraint") || err.code === "23505")) {
+      return res.status(409).json({ success: false, error: "Collision detected! This slot was just booked by another student." });
+    }
     return res.status(500).json({ success: false, error: err.message });
   }
 });
@@ -457,7 +726,7 @@ app.post("/api/waitlists", async (req, res) => {
 
     await query.run(
       `INSERT INTO waitlists (id, facilityId, facilityName, location, dateKey, slotId, startLabel, endLabel, rollNumber, studentName, hostel, queuePosition, status, createdAt)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)`,
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)`,
       [
         waitlistId,
         facilityId,
@@ -471,6 +740,7 @@ app.post("/api/waitlists", async (req, res) => {
         studentName,
         hostel || "Lohit",
         queuePosition,
+        "WAITLISTED",
         createdAt
       ]
     );
@@ -491,11 +761,17 @@ app.post("/api/waitlists", async (req, res) => {
           hostel: w.hostel,
           queuePosition: w.queueposition || w.queuePosition,
           status: w.status,
-          createdAt: w.createdat || w.createdAt
         }
       : null;
 
-    return res.json({ success: true, waitlist: waitlistCamel });
+    dispatchNotification({
+      rollNumber,
+      title: `Joined Waitlist (Position #${queuePosition}) ⏳`,
+      message: `You are in line at position #${queuePosition} for ${facility.name} on ${dateKey} (${labels.start}).`,
+      type: "WAITLIST"
+    });
+
+    return res.json({ success: true, waitlist: waitlistCamel, entry: waitlistCamel });
   } catch (err) {
     return res.status(500).json({ success: false, error: err.message });
   }
@@ -606,6 +882,22 @@ app.post("/api/bookings/:id/cancel", async (req, res) => {
         [promotedFacilityId, promotedDateKey, promotedSlotId, promotedQueuePosition]
       );
 
+      // Dispatch promotion notification to promoted candidate
+      dispatchNotification({
+        rollNumber: promotedRollNumber,
+        title: "Waitlist Auto-Promoted! ⚡",
+        message: `Great news! Your waitlist position #1 for ${promotedFacilityName} on ${promotedDateKey} (${promotedStartLabel}) has been auto-promoted to a Confirmed Booking!`,
+        type: "PROMOTION"
+      });
+
+      // Dispatch cancellation notification to original user
+      dispatchNotification({
+        rollNumber: booking.rollnumber || booking.rollNumber,
+        title: "Booking Cancelled",
+        message: `Your reservation for ${booking.facilityname || booking.facilityName} on ${dateKey} (${booking.startlabel || booking.startLabel}) has been cancelled.`,
+        type: "CANCELLATION"
+      });
+
       return res.json({
         success: true,
         promoted: true,
@@ -614,6 +906,14 @@ app.post("/api/bookings/:id/cancel", async (req, res) => {
         startLabel: promotedStartLabel
       });
     }
+
+    // Dispatch cancellation notification to original user (no waitlist candidate)
+    dispatchNotification({
+      rollNumber: booking.rollnumber || booking.rollNumber,
+      title: "Booking Cancelled",
+      message: `Your reservation for ${booking.facilityname || booking.facilityName} on ${dateKey} (${booking.startlabel || booking.startLabel}) has been cancelled.`,
+      type: "CANCELLATION"
+    });
 
     return res.json({ success: true, promoted: false });
   } catch (err) {
@@ -704,43 +1004,182 @@ app.get("/api/admin/analytics", async (req, res) => {
     const todayStr = new Date().toISOString().split("T")[0];
 
     // 1. Total Slots Reserved Today
-    const todayBookings = await query.get(
+    const todayBookingsRow = await query.get(
       "SELECT COUNT(*) as count FROM bookings WHERE dateKey = $1 AND status = 'CONFIRMED'",
       [todayStr]
     );
-    const totalBookings = parseInt(todayBookings.count || 0, 10);
+    const totalBookings = parseInt(todayBookingsRow ? todayBookingsRow.count : 0, 10);
 
-    // 2. Peak Hours Utilization
-    // Let's count peak bookings (6pm - 10pm -> slots "6pm", "7pm", "8pm", "9pm") today
-    const peakBookings = await query.get(
-      `SELECT COUNT(*) as count FROM bookings 
-       WHERE dateKey = $1 AND status = 'CONFIRMED' AND slotId IN ('6pm', '7pm', '8pm', '9pm')`,
-      [todayStr]
-    );
-    const peakCount = parseInt(peakBookings.count || 0, 10);
-    // Peak hours slots across all 10 facilities = 10 * 4 = 40 slots.
-    const peakHoursUtilization = peakCount > 0 ? Number(((peakCount / 40) * 100).toFixed(1)) : 0.0;
-
-    // 3. Collision statistics (always 0 since transaction prevent it)
-    const collisions = 0;
-
-    // 4. Active Campus Users
-    const activeUsers = await query.get(
+    // 2. Active Campus Users
+    const activeUsersRow = await query.get(
       `SELECT COUNT(DISTINCT rollNumber) as count FROM (
         SELECT rollNumber FROM bookings
         UNION
         SELECT rollNumber FROM waitlists
       ) as u`
     );
-    const activeCount = parseInt(activeUsers.count || 0, 10);
+    const activeCount = parseInt(activeUsersRow ? activeUsersRow.count : 0, 10);
+
+    // 3. Hourly Peak Hours Distribution (6am to 9pm)
+    const TIME_SLOTS_LIST = [
+      { id: "6am", label: "6:00 AM" },
+      { id: "7am", label: "7:00 AM" },
+      { id: "8am", label: "8:00 AM" },
+      { id: "9am", label: "9:00 AM" },
+      { id: "10am", label: "10:00 AM" },
+      { id: "11am", label: "11:00 AM" },
+      { id: "12pm", label: "12:00 PM" },
+      { id: "1pm", label: "1:00 PM" },
+      { id: "2pm", label: "2:00 PM" },
+      { id: "3pm", label: "3:00 PM" },
+      { id: "4pm", label: "4:00 PM" },
+      { id: "5pm", label: "5:00 PM" },
+      { id: "6pm", label: "6:00 PM" },
+      { id: "7pm", label: "7:00 PM" },
+      { id: "8pm", label: "8:00 PM" },
+      { id: "9pm", label: "9:00 PM" }
+    ];
+
+    const slotCounts = await query.all(
+      `SELECT slotId, COUNT(*) as count FROM bookings WHERE status = 'CONFIRMED' GROUP BY slotId`
+    );
+
+    const slotMap = {};
+    slotCounts.forEach((r) => {
+      slotMap[r.slotid || r.slotId] = parseInt(r.count, 10);
+    });
+
+    const maxSlotCount = Math.max(...Object.values(slotMap), 1);
+
+    const peakHoursDistribution = TIME_SLOTS_LIST.map((slot) => {
+      const count = slotMap[slot.id] || 0;
+      return {
+        slotId: slot.id,
+        label: slot.label,
+        count,
+        percent: Number(((count / maxSlotCount) * 100).toFixed(0))
+      };
+    });
+
+    // 4. Facility Utilization per Ground / Sport
+    const facilitiesList = await query.all("SELECT id, name, sport FROM facilities");
+    const facilityCounts = await query.all(
+      `SELECT facilityId, COUNT(*) as count FROM bookings WHERE status = 'CONFIRMED' GROUP BY facilityId`
+    );
+    const facilityMap = {};
+    facilityCounts.forEach((r) => {
+      facilityMap[r.facilityid || r.facilityId] = parseInt(r.count, 10);
+    });
+
+    const facilityUtilization = facilitiesList.map((f) => {
+      const bCount = facilityMap[f.id] || 0;
+      // 16 slots per day available capacity
+      const utilizationRate = Math.min(100, Number(((bCount / 16) * 100).toFixed(1)));
+      return {
+        id: f.id,
+        name: f.name,
+        sport: f.sport,
+        bookedCount: bCount,
+        utilizationRate
+      };
+    }).sort((a, b) => b.utilizationRate - a.utilizationRate);
+
+    // 5. No-Show & Attendance Metrics
+    const attendanceRows = await query.all(
+      `SELECT attendanceStatus, COUNT(*) as count FROM bookings WHERE status = 'CONFIRMED' GROUP BY attendanceStatus`
+    );
+
+    let attended = 0;
+    let noShow = 0;
+    let pending = 0;
+
+    attendanceRows.forEach((r) => {
+      const status = (r.attendancestatus || r.attendanceStatus || "PENDING").toUpperCase();
+      const c = parseInt(r.count, 10);
+      if (status === "ATTENDED") attended += c;
+      else if (status === "NO_SHOW") noShow += c;
+      else pending += c;
+    });
+
+    const totalProcessedAttendance = attended + noShow;
+    const noShowRate = totalProcessedAttendance > 0
+      ? Number(((noShow / totalProcessedAttendance) * 100).toFixed(1))
+      : 0.0;
+
+    const overallUtilizationRate = facilityUtilization.length > 0
+      ? Number((facilityUtilization.reduce((acc, curr) => acc + curr.utilizationRate, 0) / facilityUtilization.length).toFixed(1))
+      : 0.0;
+
+    // Peak hour label
+    const peakSlot = [...peakHoursDistribution].sort((a, b) => b.count - a.count)[0];
+    const peakHourLabel = peakSlot ? `${peakSlot.label} (${peakSlot.count} bookings)` : "6:00 PM - 9:00 PM";
+    const topDemandedFacility = facilityUtilization[0]?.name || "Badminton Hall";
+
+    // 6. Groq AI Executive Insights Generation
+    const aiInsights = await generateGroqAnalyticsInsights({
+      totalBookings,
+      overallUtilizationRate,
+      peakHourLabel,
+      noShowRate,
+      topDemandedFacility
+    });
+
+    // 7. Fetch Today's Bookings for Ground Staff Check-In
+    const todaysBookingsRaw = await query.all(
+      `SELECT * FROM bookings WHERE dateKey = $1 AND status = 'CONFIRMED' ORDER BY slotId ASC`,
+      [todayStr]
+    );
+
+    const todaysBookings = todaysBookingsRaw.map((b) => ({
+      id: b.id,
+      facilityId: b.facilityid || b.facilityId,
+      facilityName: b.facilityname || b.facilityName,
+      dateKey: b.datekey || b.dateKey,
+      slotId: b.slotid || b.slotId,
+      startLabel: b.startlabel || b.startLabel,
+      endLabel: b.endlabel || b.endLabel,
+      studentName: b.studentname || b.studentName,
+      rollNumber: b.rollnumber || b.rollNumber,
+      attendanceStatus: b.attendancestatus || b.attendanceStatus || "PENDING"
+    }));
 
     return res.json({
       success: true,
       totalBookings,
-      peakHoursUtilization: peakHoursUtilization || 0, // Fallback if no bookings
-      collisions,
-      activeUsers: activeCount
+      overallUtilizationRate,
+      activeUsers: activeCount,
+      collisions: 0,
+      peakHoursDistribution,
+      facilityUtilization,
+      noShowStats: {
+        attended,
+        noShow,
+        pending,
+        noShowRate
+      },
+      aiInsights,
+      todaysBookings
     });
+  } catch (err) {
+    return res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// Update Booking Attendance (Mark Attended / Mark No-Show)
+app.patch("/api/admin/bookings/:id/attendance", async (req, res) => {
+  const bookingId = req.params.id;
+  const { attendanceStatus } = req.body; // 'ATTENDED' | 'NO_SHOW' | 'PENDING'
+
+  if (!attendanceStatus || !["ATTENDED", "NO_SHOW", "PENDING"].includes(attendanceStatus)) {
+    return res.status(400).json({ success: false, error: "Valid attendanceStatus is required" });
+  }
+
+  try {
+    await query.run(
+      "UPDATE bookings SET attendanceStatus = $1 WHERE id = $2",
+      [attendanceStatus, bookingId]
+    );
+    return res.json({ success: true, bookingId, attendanceStatus });
   } catch (err) {
     return res.status(500).json({ success: false, error: err.message });
   }
@@ -765,11 +1204,367 @@ app.patch("/api/admin/facilities/:id/maintenance", async (req, res) => {
       return res.status(404).json({ error: "Facility not found" });
     }
 
+    if (lockVal === 1) {
+      try {
+        const facility = await query.get("SELECT name FROM facilities WHERE id = $1", [facilityId]);
+        const facilityName = facility ? facility.name : "Sports Facility";
+
+        const studentsToNotify = await query.all(
+          `SELECT DISTINCT rollNumber FROM (
+            SELECT rollNumber FROM bookings WHERE facilityId = $1
+            UNION
+            SELECT rollNumber FROM waitlists WHERE facilityId = $1
+          ) as u`,
+          [facilityId]
+        );
+
+        const targetRolls = studentsToNotify.length > 0
+          ? studentsToNotify.map((s) => s.rollnumber || s.rollNumber)
+          : (await query.all("SELECT DISTINCT rollNumber FROM bookings LIMIT 20")).map((s) => s.rollnumber || s.rollNumber);
+
+        targetRolls.forEach((roll) => {
+          dispatchNotification({
+            rollNumber: roll,
+            title: `Facility Maintenance Alert: ${facilityName} 🛠️`,
+            message: `Notice: ${facilityName} has been temporarily locked for maintenance by Gymkhana Admin. Expected to re-open shortly.`,
+            type: "CANCELLATION"
+          });
+        });
+      } catch (notifErr) {
+        console.warn("Notice dispatch error:", notifErr.message);
+      }
+    }
+
     return res.json({ success: true });
   } catch (err) {
     return res.status(500).json({ error: err.message });
   }
 });
+
+// ==========================================
+// 7. Operations: Maintenance Windows & Event Approvals
+// ==========================================
+app.get("/api/admin/maintenance-windows", async (req, res) => {
+  try {
+    const windows = await query.all("SELECT * FROM maintenance_windows ORDER BY createdAt DESC");
+    const parsed = windows.map((w) => ({
+      id: w.id,
+      facilityId: w.facilityid || w.facilityId,
+      facilityName: w.facilityname || w.facilityName,
+      startDate: w.startdate || w.startDate,
+      endDate: w.enddate || w.endDate,
+      reason: w.reason,
+      slotIds: JSON.parse(w.slotids || w.slotIds || "[]"),
+      createdAt: w.createdat || w.createdAt
+    }));
+    return res.json({ success: true, windows: parsed });
+  } catch (err) {
+    return res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+app.post("/api/admin/maintenance-windows", async (req, res) => {
+  const { facilityId, startDate, endDate, reason, slotIds = ["all"] } = req.body;
+  if (!facilityId || !startDate || !endDate || !reason) {
+    return res.status(400).json({ success: false, error: "Missing required maintenance window fields" });
+  }
+
+  try {
+    const facility = await query.get("SELECT * FROM facilities WHERE id = $1", [facilityId]);
+    if (!facility) {
+      return res.status(404).json({ success: false, error: "Facility not found" });
+    }
+
+    const id = generateId("mw");
+    const createdAt = new Date().toISOString();
+
+    await query.run(
+      `INSERT INTO maintenance_windows (id, facilityId, facilityName, startDate, endDate, reason, slotIds, createdAt)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
+      [id, facilityId, facility.name, startDate, endDate, reason, JSON.stringify(slotIds), createdAt]
+    );
+
+    const window = await query.get("SELECT * FROM maintenance_windows WHERE id = $1", [id]);
+
+    // Dispatch in-app and Twilio SMS/WhatsApp notifications to students
+    try {
+      const studentsToNotify = await query.all(
+        `SELECT DISTINCT rollNumber FROM (
+          SELECT rollNumber FROM bookings WHERE facilityId = $1
+          UNION
+          SELECT rollNumber FROM waitlists WHERE facilityId = $1
+        ) as u`,
+        [facilityId]
+      );
+
+      const targetRolls = studentsToNotify.length > 0
+        ? studentsToNotify.map((s) => s.rollnumber || s.rollNumber)
+        : (await query.all("SELECT DISTINCT rollNumber FROM bookings LIMIT 20")).map((s) => s.rollnumber || s.rollNumber);
+
+      targetRolls.forEach((roll) => {
+        dispatchNotification({
+          rollNumber: roll,
+          title: `Facility Closure Notice: ${facility.name} 🛠️`,
+          message: `Notice: ${facility.name} will be closed from ${startDate} to ${endDate}. Reason: ${reason}. Facilities will be accessible again from ${endDate}.`,
+          type: "CANCELLATION"
+        });
+      });
+    } catch (notifErr) {
+      console.warn("Notice dispatch error:", notifErr.message);
+    }
+
+    return res.json({
+      success: true,
+      window: {
+        id: window.id,
+        facilityId: window.facilityid || window.facilityId,
+        facilityName: window.facilityname || window.facilityName,
+        startDate: window.startdate || window.startDate,
+        endDate: window.enddate || window.endDate,
+        reason: window.reason,
+        slotIds: JSON.parse(window.slotids || window.slotIds || "[]"),
+        createdAt: window.createdat || window.createdAt
+      }
+    });
+  } catch (err) {
+    return res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+app.delete("/api/admin/maintenance-windows/:id", async (req, res) => {
+  try {
+    await query.run("DELETE FROM maintenance_windows WHERE id = $1", [req.params.id]);
+    return res.json({ success: true });
+  } catch (err) {
+    return res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+app.post("/api/bookings/request-approval", async (req, res) => {
+  const { facilityId, studentName, rollNumber, eventName, dateKey, slotId, purpose } = req.body;
+  if (!facilityId || !studentName || !rollNumber || !eventName || !dateKey || !slotId || !purpose) {
+    return res.status(400).json({ success: false, error: "Missing required event approval fields" });
+  }
+
+  try {
+    const facility = await query.get("SELECT * FROM facilities WHERE id = $1", [facilityId]);
+    if (!facility) {
+      return res.status(404).json({ success: false, error: "Facility not found" });
+    }
+
+    const TIME_LABELS = {
+      "6am": { start: "6:00 am", end: "7:00 am" },
+      "7am": { start: "7:00 am", end: "8:00 am" },
+      "8am": { start: "8:00 am", end: "9:00 am" },
+      "9am": { start: "9:00 am", end: "10:00 am" },
+      "10am": { start: "10:00 am", end: "11:00 am" },
+      "11am": { start: "11:00 am", end: "12:00 pm" },
+      "12pm": { start: "12:00 pm", end: "1:00 pm" },
+      "1pm": { start: "1:00 pm", end: "2:00 pm" },
+      "2pm": { start: "2:00 pm", end: "3:00 pm" },
+      "3pm": { start: "3:00 pm", end: "4:00 pm" },
+      "4pm": { start: "4:00 pm", end: "5:00 pm" },
+      "5pm": { start: "5:00 pm", end: "6:00 pm" },
+      "6pm": { start: "6:00 pm", end: "7:00 pm" },
+      "7pm": { start: "7:00 pm", end: "8:00 pm" },
+      "8pm": { start: "8:00 pm", end: "9:00 pm" },
+      "9pm": { start: "9:00 pm", end: "10:00 pm" }
+    };
+    const labels = TIME_LABELS[slotId] || { start: "Unknown", end: "Unknown" };
+
+    const id = generateId("appr");
+    const requestedAt = new Date().toISOString();
+
+    await query.run(
+      `INSERT INTO event_approvals (id, facilityId, facilityName, studentName, rollNumber, eventName, dateKey, slotId, startLabel, endLabel, purpose, status, requestedAt)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, 'PENDING', $12)`,
+      [
+        id,
+        facilityId,
+        facility.name,
+        studentName,
+        rollNumber,
+        eventName,
+        dateKey,
+        slotId,
+        labels.start,
+        labels.end,
+        purpose,
+        requestedAt
+      ]
+    );
+
+    const approval = await query.get("SELECT * FROM event_approvals WHERE id = $1", [id]);
+    return res.json({ success: true, approval });
+  } catch (err) {
+    return res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+app.get("/api/admin/approvals", async (req, res) => {
+  try {
+    const rows = await query.all("SELECT * FROM event_approvals ORDER BY requestedAt DESC");
+    const approvals = rows.map((a) => ({
+      id: a.id,
+      facilityId: a.facilityid || a.facilityId,
+      facilityName: a.facilityname || a.facilityName,
+      studentName: a.studentname || a.studentName,
+      rollNumber: a.rollnumber || a.rollNumber,
+      eventName: a.eventname || a.eventName,
+      dateKey: a.datekey || a.dateKey,
+      slotId: a.slotid || a.slotId,
+      startLabel: a.startlabel || a.startLabel,
+      endLabel: a.endlabel || a.endLabel,
+      purpose: a.purpose,
+      status: a.status,
+      requestedAt: a.requestedat || a.requestedAt,
+      processedAt: a.processedat || a.processedAt,
+      rejectionReason: a.rejectionreason || a.rejectionReason
+    }));
+    return res.json({ success: true, approvals });
+  } catch (err) {
+    return res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+app.patch("/api/admin/approvals/:id", async (req, res) => {
+  const approvalId = req.params.id;
+  const { action, rejectionReason } = req.body;
+
+  if (!action || (action !== "APPROVE" && action !== "REJECT")) {
+    return res.status(400).json({ success: false, error: "Action must be 'APPROVE' or 'REJECT'" });
+  }
+
+  try {
+    const approval = await query.get("SELECT * FROM event_approvals WHERE id = $1", [approvalId]);
+    if (!approval) {
+      return res.status(404).json({ success: false, error: "Approval request not found" });
+    }
+
+    const processedAt = new Date().toISOString();
+
+    if (action === "REJECT") {
+      await query.run(
+        "UPDATE event_approvals SET status = 'REJECTED', processedAt = $1, rejectionReason = $2 WHERE id = $3",
+        [processedAt, rejectionReason || "Rejected by Gymkhana Admin", approvalId]
+      );
+
+      dispatchNotification({
+        rollNumber: approval.rollnumber || approval.rollNumber,
+        title: "Event Request Update",
+        message: `Your event request '${approval.eventname || approval.eventName}' was rejected: ${rejectionReason || "Slot unavailable"}`,
+        type: "EVENT_APPROVAL"
+      });
+
+      return res.json({ success: true, status: "REJECTED" });
+    }
+
+    // Action === 'APPROVE'
+    const facilityId = approval.facilityid || approval.facilityId;
+    const dateKey = approval.datekey || approval.dateKey;
+    const slotId = approval.slotid || approval.slotId;
+    const studentName = approval.studentname || approval.studentName;
+    const rollNumber = approval.rollnumber || approval.rollNumber;
+    const startLabel = approval.startlabel || approval.startLabel;
+    const endLabel = approval.endlabel || approval.endLabel;
+    const facilityName = approval.facilityname || approval.facilityName;
+
+    const bookingId = generateId("bk_event");
+
+    await query.run(
+      `INSERT INTO bookings (id, facilityId, facilityName, location, dateKey, slotId, startLabel, endLabel, rollNumber, studentName, hostel, status, bookedAt)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, 'CONFIRMED', $12)`,
+      [
+        bookingId,
+        facilityId,
+        facilityName,
+        "Campus Sports Complex",
+        dateKey,
+        slotId,
+        startLabel,
+        endLabel,
+        rollNumber,
+        studentName,
+        "Event Organizers",
+        processedAt
+      ]
+    );
+
+    await query.run(
+      "UPDATE event_approvals SET status = 'APPROVED', processedAt = $1 WHERE id = $2",
+      [processedAt, approvalId]
+    );
+
+    dispatchNotification({
+      rollNumber,
+      title: "Event Request Approved! 🏆",
+      message: `Your event request '${approval.eventname || approval.eventName}' for ${facilityName} on ${dateKey} (${startLabel}) has been APPROVED by Gymkhana Admin!`,
+      type: "EVENT_APPROVAL"
+    });
+
+    return res.json({ success: true, status: "APPROVED", bookingId });
+  } catch (err) {
+    return res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// ==========================================
+// 8. Notifications & Twilio Webhook API
+// ==========================================
+app.get("/api/notifications", async (req, res) => {
+  const { rollNumber } = req.query;
+  if (!rollNumber) {
+    return res.status(400).json({ success: false, error: "Roll number is required" });
+  }
+
+  try {
+    const rows = await query.all(
+      "SELECT * FROM notifications WHERE rollNumber = $1 ORDER BY createdAt DESC LIMIT 50",
+      [rollNumber]
+    );
+    const notifications = rows.map((n) => ({
+      id: n.id,
+      rollNumber: n.rollnumber || n.rollNumber,
+      title: n.title,
+      message: n.message,
+      type: n.type,
+      isRead: Boolean(n.isread || n.isRead),
+      createdAt: n.createdat || n.createdAt
+    }));
+
+    const unreadCount = notifications.filter((n) => !n.isRead).length;
+
+    return res.json({ success: true, notifications, unreadCount });
+  } catch (err) {
+    return res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+app.patch("/api/notifications/:id/read", async (req, res) => {
+  try {
+    await query.run("UPDATE notifications SET isRead = 1 WHERE id = $1", [req.params.id]);
+    return res.json({ success: true });
+  } catch (err) {
+    return res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+app.delete("/api/notifications/clear", async (req, res) => {
+  const { rollNumber } = req.query;
+  if (!rollNumber) {
+    return res.status(400).json({ success: false, error: "Roll number is required" });
+  }
+
+  try {
+    await query.run("DELETE FROM notifications WHERE rollNumber = $1", [rollNumber]);
+    return res.json({ success: true });
+  } catch (err) {
+    return res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// Twilio WhatsApp Chatbot Webhook Endpoint (Future Chatbot Feature)
+app.post("/api/notifications/twilio-webhook", handleWhatsAppWebhook);
 
 // Start Server and Database initialization
 app.listen(PORT, async () => {

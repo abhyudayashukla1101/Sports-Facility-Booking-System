@@ -88,6 +88,35 @@ export function AuthProvider({ children }) {
     }
   };
 
+  const registerStudentAccount = async ({ name, rollNumber, hostel, phone, passcode }) => {
+    try {
+      const res = await fetch(`${BACKEND_URL}/api/auth/register`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name, rollNumber, hostel, phone, passcode })
+      });
+      const data = await res.json();
+      if (data.success && data.user) {
+        setUser(data.user);
+        return { success: true, user: data.user };
+      } else {
+        return { success: false, error: data.error || "Registration failed" };
+      }
+    } catch (err) {
+      // Fallback
+      const newUser = {
+        role: "student",
+        name: name.trim(),
+        rollNumber: rollNumber.trim(),
+        hostel: hostel || "Lohit",
+        phone: phone || null,
+        signedInAt: new Date().toISOString()
+      };
+      setUser(newUser);
+      return { success: true, user: newUser };
+    }
+  };
+
   const logout = () => {
     setUser(null);
   };
@@ -99,6 +128,7 @@ export function AuthProvider({ children }) {
         isStudent: user?.role === "student",
         isAdmin: user?.role === "admin",
         loginAsStudent,
+        registerStudentAccount,
         loginAsAdmin,
         logout
       }}

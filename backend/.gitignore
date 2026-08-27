@@ -1,0 +1,7 @@
+# Environment files and API keys
+.env
+.env.*
+*.env
+node_modules/
+*.db
+*.sqlite
