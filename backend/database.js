@@ -229,6 +229,13 @@ export async function initDatabase() {
     // Ignore if column already exists
   }
 
+  // Migration: Add studentName column to notifications if missing
+  try {
+    await query.run("ALTER TABLE notifications ADD COLUMN studentName VARCHAR(255)");
+  } catch (mErr) {
+    // Ignore if column already exists
+  }
+
   // Seed default data if facilities table is empty
   const facilityCount = await query.get("SELECT COUNT(*) as count FROM facilities");
   const fCount = parseInt(facilityCount ? facilityCount.count : 0, 10);

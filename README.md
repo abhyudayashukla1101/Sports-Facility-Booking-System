@@ -134,61 +134,55 @@ cd Sports-Facility-Booking-System
 
 ---
 
-### Step 2: Set Up & Run Backend Server
+### Step 2: How to Run the Application
 
-1. Open a terminal and navigate to the `backend` folder:
-   ```bash
-   cd backend
-   ```
+You have two convenient options to run the application:
 
-2. Install backend dependencies:
-   ```bash
-   npm install
-   ```
+#### ⚡ Option A: Single Command (Recommended for Development)
+From the project root directory, you can launch **both** the backend and frontend simultaneously with a single terminal command:
 
-3. Environment Configuration (`.env`):
-   The backend comes pre-configured with SQLite database fallback out-of-the-box. You can inspect or update `backend/.env`:
-   ```env
-   PORT=8000
-   GROQ_API_KEY=your_groq_api_key_here
-   TWILIO_ACCOUNT_SID=your_twilio_account_sid
-   TWILIO_AUTH_TOKEN=your_twilio_auth_token
-   TWILIO_PHONE_NUMBER=+18005550199
-   TWILIO_WHATSAPP_NUMBER=+14155238886
-   ```
-   *(Note: If Groq or Twilio credentials are not set, the system gracefully falls back to built-in analytics algorithms and in-app notifications without crashing).*
+```bash
+# 1. Install all dependencies (backend & frontend)
+npm run install:all
 
-4. Start the Backend Server:
-   ```bash
-   npm run dev
-   # or
-   npm start
-   ```
-   The backend API will start on **`http://localhost:8000`** and automatically seed initial campus facilities into `sports_booking.db`.
+# 2. Start both servers concurrently
+npm run dev
+```
+
+- Backend runs on: **`http://localhost:8000`**
+- Frontend runs on: **`http://localhost:5173`**
 
 ---
 
-### Step 3: Set Up & Run Frontend Application
+#### 📦 Option B: Single-Port Production Server
+To run everything unified on a single port (**`http://localhost:8000`**):
 
-1. Open a new terminal window/tab and navigate to the `frontend` folder:
-   ```bash
-   cd frontend
-   ```
+```bash
+# Builds frontend & starts unified backend server
+npm start
+```
 
-2. Install frontend dependencies:
-   ```bash
-   npm install
-   ```
+---
 
-3. Start the Frontend Development Server:
-   ```bash
-   npm run dev
-   ```
+#### 🛠️ Option C: Run Backend & Frontend Separately
 
-4. Open your browser and navigate to:
-   ```
-   http://localhost:5173
-   ```
+If you prefer running them in separate terminal windows:
+
+**1. Backend Server:**
+```bash
+cd backend
+npm install
+npm run dev
+```
+*(Backend runs on http://localhost:8000)*
+
+**2. Frontend App:**
+```bash
+cd frontend
+npm install
+npm run dev
+```
+*(Frontend runs on http://localhost:5173)*
 
 ---
 

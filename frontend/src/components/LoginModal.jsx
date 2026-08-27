@@ -43,16 +43,21 @@ export default function LoginModal({ onClose, onSuccess, initialTab = "student",
 
   const handleStudentSubmit = async (e) => {
     e.preventDefault();
+    setAuthError("");
     if (!studentName.trim() || !rollNumber.trim()) return;
 
-    const loggedInUser = await loginAsStudent({
+    const result = await loginAsStudent({
       name: studentName,
       rollNumber,
       hostel
     });
 
-    if (onSuccess) onSuccess(loggedInUser);
-    onClose();
+    if (result.success && result.user) {
+      if (onSuccess) onSuccess(result.user);
+      onClose();
+    } else {
+      setAuthError(result.error || "No registered account found. Please click 'Create an account' to register first.");
+    }
   };
 
   const handleRegisterSubmit = async (e) => {
@@ -170,6 +175,21 @@ export default function LoginModal({ onClose, onSuccess, initialTab = "student",
         {/* TAB 1: STUDENT SIGN IN */}
         {activeTab === "student" && (
           <form onSubmit={handleStudentSubmit} className="px-5 pb-6 space-y-4">
+            {authError && (
+              <div className="rounded-xl border border-booked/40 bg-booked/10 p-3 text-xs font-semibold text-booked animate-fadeIn flex flex-col gap-1">
+                <span>{authError}</span>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setAuthError("");
+                    setActiveTab("register");
+                  }}
+                  className="text-left font-bold text-accent hover:underline mt-1"
+                >
+                  → Click here to Register a new account
+                </button>
+              </div>
+            )}
             <div>
               <label className="block text-xs font-semibold text-muted uppercase tracking-wider mb-1.5">
                 Full Name

@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { NavLink } from "react-router-dom";
+import { NavLink, useNavigate } from "react-router-dom";
 import { Zap, LogOut, User, ShieldCheck, Mail } from "lucide-react";
 import { useAuth } from "../hooks/useAuth";
 import LoginModal from "./LoginModal";
@@ -8,8 +8,14 @@ import NotificationCenter from "./NotificationCenter";
 
 export default function Navbar() {
   const { user, isAdmin, logout } = useAuth();
+  const navigate = useNavigate();
   const [showLoginModal, setShowLoginModal] = useState(false);
   const [showContactModal, setShowContactModal] = useState(false);
+
+  const handleLogout = () => {
+    logout();
+    navigate("/");
+  };
 
   return (
     <>
@@ -101,7 +107,7 @@ export default function Navbar() {
                 </div>
 
                 <button
-                  onClick={logout}
+                  onClick={handleLogout}
                   title="Sign out"
                   className="flex items-center gap-1.5 rounded-full border border-surface-border bg-surface px-3 py-1.5 text-xs font-semibold text-muted hover:text-white hover:border-booked/40 hover:bg-booked/10 transition"
                 >

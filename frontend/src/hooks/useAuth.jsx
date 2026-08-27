@@ -39,22 +39,14 @@ export function AuthProvider({ children }) {
       const data = await res.json();
       if (data.success && data.user) {
         setUser(data.user);
-        return data.user;
+        return { success: true, user: data.user };
+      } else {
+        return { success: false, error: data.error || "No registered account found for this Roll Number. Please register first." };
       }
     } catch (err) {
-      console.warn("Backend auth offline, using local session fallback:", err);
+      console.warn("Backend auth offline:", err);
+      return { success: false, error: "Network error connecting to authentication server." };
     }
-
-    // Fallback if backend is connecting
-    const fallbackUser = {
-      role: "student",
-      name: name.trim(),
-      rollNumber: rollNumber.trim(),
-      hostel: hostel || "Lohit",
-      signedInAt: new Date().toISOString()
-    };
-    setUser(fallbackUser);
-    return fallbackUser;
   };
 
   const loginAsAdmin = async (passcode) => {

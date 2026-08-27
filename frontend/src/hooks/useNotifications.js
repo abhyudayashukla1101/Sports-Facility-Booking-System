@@ -9,26 +9,27 @@ import {
 export function useNotifications() {
   const { user } = useAuth();
   const rollNumber = user?.rollNumber;
+  const studentName = user?.name;
   const queryClient = useQueryClient();
 
   const { data = { notifications: [], unreadCount: 0 } } = useQuery({
-    queryKey: ["notifications", rollNumber],
-    queryFn: () => getNotifications(rollNumber),
-    enabled: Boolean(rollNumber),
+    queryKey: ["notifications", rollNumber, studentName],
+    queryFn: () => getNotifications(rollNumber, studentName),
+    enabled: Boolean(rollNumber && studentName),
     refetchInterval: 5000 // Poll every 5 seconds for real-time updates
   });
 
   const markReadMutation = useMutation({
     mutationFn: apiMarkRead,
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["notifications", rollNumber] });
+      queryClient.invalidateQueries({ queryKey: ["notifications"] });
     }
   });
 
   const clearAllMutation = useMutation({
-    mutationFn: () => apiClearAll(rollNumber),
+    mutationFn: () => apiClearAll(rollNumber, studentName),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["notifications", rollNumber] });
+      queryClient.invalidateQueries({ queryKey: ["notifications"] });
     }
   });
 

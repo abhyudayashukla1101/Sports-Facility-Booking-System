@@ -11,23 +11,33 @@ import {
 export function useBookings() {
   const { user } = useAuth();
   const rollNumber = user?.rollNumber;
+  const studentName = user?.name;
   const queryClient = useQueryClient();
 
   // Query: Get logged-in user's bookings and waitlists from server
   const { data = { bookings: [], waitlists: [] } } = useQuery({
-    queryKey: ["myBookings", rollNumber],
-    queryFn: () => getMyBookings(rollNumber),
-    enabled: Boolean(rollNumber)
+    queryKey: ["myBookings", rollNumber, studentName],
+    queryFn: () => getMyBookings(rollNumber, studentName),
+    enabled: Boolean(rollNumber && studentName)
   });
 
-  const bookings = data.bookings ?? [];
-  const waitlists = data.waitlists ?? [];
+  const bookings = (data.bookings ?? []).filter(
+    (b) =>
+      (!rollNumber || (b.rollNumber || "").toLowerCase() === rollNumber.toLowerCase()) &&
+      (!studentName || (b.studentName || "").toLowerCase() === studentName.toLowerCase())
+  );
+
+  const waitlists = (data.waitlists ?? []).filter(
+    (w) =>
+      (!rollNumber || (w.rollNumber || "").toLowerCase() === rollNumber.toLowerCase()) &&
+      (!studentName || (w.studentName || "").toLowerCase() === studentName.toLowerCase())
+  );
 
   // Mutation: Create Booking
   const createBookingMutation = useMutation({
     mutationFn: createBooking,
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["myBookings", rollNumber] });
+      queryClient.invalidateQueries({ queryKey: ["myBookings"] });
       queryClient.invalidateQueries({ queryKey: ["slots"] });
       queryClient.invalidateQueries({ queryKey: ["analytics"] });
     }
@@ -37,7 +47,7 @@ export function useBookings() {
   const cancelBookingMutation = useMutation({
     mutationFn: apiCancelBooking,
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["myBookings", rollNumber] });
+      queryClient.invalidateQueries({ queryKey: ["myBookings"] });
       queryClient.invalidateQueries({ queryKey: ["slots"] });
       queryClient.invalidateQueries({ queryKey: ["analytics"] });
     }
@@ -47,7 +57,7 @@ export function useBookings() {
   const joinWaitlistMutation = useMutation({
     mutationFn: apiJoinWaitlist,
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["myBookings", rollNumber] });
+      queryClient.invalidateQueries({ queryKey: ["myBookings"] });
       queryClient.invalidateQueries({ queryKey: ["slots"] });
       queryClient.invalidateQueries({ queryKey: ["analytics"] });
     }
@@ -57,7 +67,7 @@ export function useBookings() {
   const cancelWaitlistMutation = useMutation({
     mutationFn: apiCancelWaitlist,
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["myBookings", rollNumber] });
+      queryClient.invalidateQueries({ queryKey: ["myBookings"] });
       queryClient.invalidateQueries({ queryKey: ["slots"] });
       queryClient.invalidateQueries({ queryKey: ["analytics"] });
     }

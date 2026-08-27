@@ -35,16 +35,16 @@ function generateId(prefix = "notif") {
 /**
  * Dispatch notification across In-App Feed and Twilio SMS / WhatsApp
  */
-export async function dispatchNotification({ rollNumber, title, message, type = "CONFIRMATION", phone = null }) {
+export async function dispatchNotification({ rollNumber, studentName = null, title, message, type = "CONFIRMATION", phone = null }) {
   const notifId = generateId("notif");
   const createdAt = new Date().toISOString();
 
   // 1. Always save to In-App Notifications table
   try {
     await query.run(
-      `INSERT INTO notifications (id, rollNumber, title, message, type, isRead, createdAt)
-       VALUES ($1, $2, $3, $4, $5, 0, $6)`,
-      [notifId, rollNumber, title, message, type, createdAt]
+      `INSERT INTO notifications (id, rollNumber, studentName, title, message, type, isRead, createdAt)
+       VALUES ($1, $2, $3, $4, $5, $6, 0, $7)`,
+      [notifId, rollNumber, studentName, title, message, type, createdAt]
     );
   } catch (dbErr) {
     console.error("Error saving notification to DB:", dbErr.message);

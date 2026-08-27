@@ -54,8 +54,10 @@ export async function cancelBooking(bookingId) {
   return data;
 }
 
-export async function getMyBookings(rollNumber) {
-  const res = await fetch(`${BASE_URL}/api/bookings/my-bookings?rollNumber=${rollNumber}`);
+export async function getMyBookings(rollNumber, studentName) {
+  const query = new URLSearchParams({ rollNumber });
+  if (studentName) query.append("studentName", studentName);
+  const res = await fetch(`${BASE_URL}/api/bookings/my-bookings?${query.toString()}`);
   const data = await res.json();
   if (!res.ok) throw new Error(data.error || "Failed to load bookings");
   return data;
@@ -172,8 +174,10 @@ export async function processEventApproval(id, { action, rejectionReason }) {
   return data;
 }
 
-export async function getNotifications(rollNumber) {
-  const res = await fetch(`${BASE_URL}/api/notifications?rollNumber=${rollNumber}`);
+export async function getNotifications(rollNumber, studentName) {
+  const query = new URLSearchParams({ rollNumber });
+  if (studentName) query.append("studentName", studentName);
+  const res = await fetch(`${BASE_URL}/api/notifications?${query.toString()}`);
   const data = await res.json();
   if (!res.ok) throw new Error(data.error || "Failed to load notifications");
   return data;
@@ -188,8 +192,10 @@ export async function markNotificationRead(id) {
   return data;
 }
 
-export async function clearNotifications(rollNumber) {
-  const res = await fetch(`${BASE_URL}/api/notifications/clear?rollNumber=${rollNumber}`, {
+export async function clearNotifications(rollNumber, studentName) {
+  const query = new URLSearchParams({ rollNumber });
+  if (studentName) query.append("studentName", studentName);
+  const res = await fetch(`${BASE_URL}/api/notifications/clear?${query.toString()}`, {
     method: "DELETE"
   });
   const data = await res.json();

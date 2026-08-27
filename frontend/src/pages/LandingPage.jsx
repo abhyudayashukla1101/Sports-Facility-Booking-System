@@ -23,6 +23,7 @@ import { useFacilities } from "../hooks/useFacilities";
 import { useAuth } from "../hooks/useAuth";
 import LoginModal from "../components/LoginModal";
 import EventRequestModal from "../components/EventRequestModal";
+import FacilitySlider from "../components/FacilitySlider";
 
 const UPCOMING_EVENTS = [
   {
@@ -145,80 +146,12 @@ export default function LandingPage() {
         </div>
       </section>
 
-      {/* FEATURED FACILITIES SHOWCASE */}
-      <section className="mx-auto max-w-7xl px-4 sm:px-6 space-y-8">
-        <div className="flex flex-wrap items-end justify-between gap-4">
-          <div>
-            <span className="text-xs font-extrabold tracking-wider text-accent uppercase">
-              IITG Gymkhana Sports Complex
-            </span>
-            <h2 className="mt-1 font-display text-3xl font-bold text-white sm:text-4xl">
-              Available Campus Facilities
-            </h2>
-          </div>
-
-          <Link
-            to="/facilities"
-            className="flex items-center gap-1.5 text-xs font-bold text-accent hover:underline"
-          >
-            View All Facilities Grid <ChevronRight className="h-4 w-4" />
-          </Link>
-        </div>
-
+      {/* AUTOMATICALLY SLIDING FEATURED FACILITIES SHOWCASE */}
+      <section className="mx-auto max-w-7xl px-4 sm:px-6">
         {isLoading ? (
-          <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3">
-            {Array.from({ length: 6 }).map((_, i) => (
-              <div key={i} className="h-72 animate-pulse rounded-2xl bg-surface border border-surface-border" />
-            ))}
-          </div>
+          <div className="h-96 animate-pulse rounded-3xl bg-surface border border-surface-border" />
         ) : (
-          <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3">
-            {facilities.map((fac) => (
-              <div
-                key={fac.id}
-                onClick={() => navigate(`/facilities/${fac.id}`)}
-                className="group flex flex-col overflow-hidden rounded-2xl border border-surface-border/90 bg-surface/90 transition-all duration-300 hover:border-accent/50 hover:shadow-2xl hover:-translate-y-1 cursor-pointer"
-              >
-                <div className="relative h-48 w-full overflow-hidden bg-base">
-                  <img
-                    src={fac.image}
-                    alt={fac.name}
-                    className="h-full w-full object-cover transition-transform duration-500 group-hover:scale-105"
-                  />
-                  <div className="absolute inset-0 bg-gradient-to-t from-surface via-transparent to-black/30 opacity-80" />
-
-                  <span className="absolute left-3 top-3 rounded-full bg-base/85 px-3 py-1 text-[11px] font-extrabold text-white backdrop-blur-md border border-white/10 uppercase">
-                    {fac.sport}
-                  </span>
-
-                  <span className="absolute right-3 top-3 flex items-center gap-1 rounded-full bg-accent px-2.5 py-1 text-[11px] font-extrabold text-accent-foreground shadow-md">
-                    <Star className="h-3 w-3 fill-current" strokeWidth={0} />
-                    {fac.rating}
-                  </span>
-                </div>
-
-                <div className="flex flex-1 flex-col justify-between p-5 space-y-4">
-                  <div>
-                    <h3 className="font-display text-xl font-bold text-white group-hover:text-accent transition-colors">
-                      {fac.name}
-                    </h3>
-                    <p className="text-xs text-muted/90 mt-1 line-clamp-2 leading-relaxed">
-                      {fac.description}
-                    </p>
-                  </div>
-
-                  <div className="pt-3 border-t border-surface-border/60 flex items-center justify-between text-xs font-semibold text-muted">
-                    <span className="flex items-center gap-1">
-                      <MapPin className="h-3.5 w-3.5 text-muted" /> {fac.location.split(",")[0]}
-                    </span>
-                    <span className="text-accent font-bold">
-                      Book Court <ArrowRight className="h-3.5 w-3.5 inline ml-0.5" />
-                    </span>
-                  </div>
-                </div>
-              </div>
-            ))}
-          </div>
+          <FacilitySlider facilities={facilities} />
         )}
       </section>
 

@@ -58,35 +58,41 @@ app.post("/api/auth/student-login", async (req, res) => {
     return res.status(400).json({ success: false, error: "Name and Roll Number are required" });
   }
 
+  const trimmedRoll = rollNumber.trim();
+  const trimmedName = name.trim();
+
   try {
-    const existingUser = await query.get("SELECT * FROM users WHERE rollNumber = $1", [rollNumber.trim()]);
-    if (existingUser) {
-      return res.json({
-        success: true,
-        user: {
-          role: "student",
-          name: existingUser.name,
-          rollNumber: existingUser.rollnumber || existingUser.rollNumber,
-          hostel: existingUser.hostel,
-          phone: existingUser.phone,
-          signedInAt: new Date().toISOString()
-        }
+    const existingUser = await query.get("SELECT * FROM users WHERE LOWER(rollNumber) = LOWER($1)", [trimmedRoll]);
+    
+    if (!existingUser) {
+      return res.status(404).json({
+        success: false,
+        error: `No registered account found for Roll Number '${trimmedRoll}'. Please click 'Create an account' to register first.`
       });
     }
-  } catch (dbErr) {
-    console.warn("User lookup error:", dbErr.message);
-  }
 
-  return res.json({
-    success: true,
-    user: {
-      role: "student",
-      name: name.trim(),
-      rollNumber: rollNumber.trim(),
-      hostel: hostel || "Lohit",
-      signedInAt: new Date().toISOString()
+    const registeredName = existingUser.name || existingUser.studentName;
+    if (registeredName && registeredName.toLowerCase() !== trimmedName.toLowerCase()) {
+      return res.status(409).json({
+        success: false,
+        error: `Roll Number '${trimmedRoll}' is registered to student '${registeredName}'. Please enter your registered account name.`
+      });
     }
-  });
+
+    return res.json({
+      success: true,
+      user: {
+        role: "student",
+        name: existingUser.name,
+        rollNumber: existingUser.rollnumber || existingUser.rollNumber,
+        hostel: existingUser.hostel || hostel || "Lohit",
+        phone: existingUser.phone,
+        signedInAt: new Date().toISOString()
+      }
+    });
+  } catch (dbErr) {
+    return res.status(500).json({ success: false, error: dbErr.message });
+  }
 });
 
 app.post("/api/auth/register", async (req, res) => {
@@ -615,20 +621,30 @@ app.post("/api/bookings", async (req, res) => {
 
 // Get student's bookings and active waitlists
 app.get("/api/bookings/my-bookings", async (req, res) => {
-  const { rollNumber } = req.query;
+  const { rollNumber, studentName } = req.query;
   if (!rollNumber) {
     return res.status(400).json({ error: "Roll number is required" });
   }
 
+  const trimmedRoll = rollNumber.trim();
+  const trimmedName = studentName ? studentName.trim() : null;
+
   try {
-    const rawBookings = await query.all(
-      "SELECT * FROM bookings WHERE rollNumber = $1 ORDER BY bookedAt DESC",
-      [rollNumber]
-    );
-    const rawWaitlists = await query.all(
-      "SELECT * FROM waitlists WHERE rollNumber = $1 AND status = 'WAITLISTED' ORDER BY createdAt DESC",
-      [rollNumber]
-    );
+    let sqlBookings = "SELECT * FROM bookings WHERE LOWER(rollNumber) = LOWER($1)";
+    let sqlWaitlists = "SELECT * FROM waitlists WHERE LOWER(rollNumber) = LOWER($1) AND status = 'WAITLISTED'";
+    const params = [trimmedRoll];
+
+    if (trimmedName) {
+      sqlBookings += " AND LOWER(studentName) = LOWER($2)";
+      sqlWaitlists += " AND LOWER(studentName) = LOWER($2)";
+      params.push(trimmedName);
+    }
+
+    sqlBookings += " ORDER BY bookedAt DESC";
+    sqlWaitlists += " ORDER BY createdAt DESC";
+
+    const rawBookings = await query.all(sqlBookings, params);
+    const rawWaitlists = await query.all(sqlWaitlists, params);
 
     const bookings = rawBookings.map((b) => ({
       id: b.id,
@@ -1512,19 +1528,30 @@ app.patch("/api/admin/approvals/:id", async (req, res) => {
 // 8. Notifications & Twilio Webhook API
 // ==========================================
 app.get("/api/notifications", async (req, res) => {
-  const { rollNumber } = req.query;
+  const { rollNumber, studentName } = req.query;
   if (!rollNumber) {
     return res.status(400).json({ success: false, error: "Roll number is required" });
   }
 
+  const trimmedRoll = rollNumber.trim();
+  const trimmedName = studentName ? studentName.trim() : null;
+
   try {
-    const rows = await query.all(
-      "SELECT * FROM notifications WHERE rollNumber = $1 ORDER BY createdAt DESC LIMIT 50",
-      [rollNumber]
-    );
+    let sql = "SELECT * FROM notifications WHERE LOWER(rollNumber) = LOWER($1)";
+    const params = [trimmedRoll];
+
+    if (trimmedName) {
+      sql += " AND (LOWER(studentName) = LOWER($2) OR studentName IS NULL OR studentName = '')";
+      params.push(trimmedName);
+    }
+
+    sql += " ORDER BY createdAt DESC LIMIT 50";
+
+    const rows = await query.all(sql, params);
     const notifications = rows.map((n) => ({
       id: n.id,
       rollNumber: n.rollnumber || n.rollNumber,
+      studentName: n.studentname || n.studentName,
       title: n.title,
       message: n.message,
       type: n.type,
@@ -1550,13 +1577,24 @@ app.patch("/api/notifications/:id/read", async (req, res) => {
 });
 
 app.delete("/api/notifications/clear", async (req, res) => {
-  const { rollNumber } = req.query;
+  const { rollNumber, studentName } = req.query;
   if (!rollNumber) {
     return res.status(400).json({ success: false, error: "Roll number is required" });
   }
 
+  const trimmedRoll = rollNumber.trim();
+  const trimmedName = studentName ? studentName.trim() : null;
+
   try {
-    await query.run("DELETE FROM notifications WHERE rollNumber = $1", [rollNumber]);
+    let sql = "DELETE FROM notifications WHERE LOWER(rollNumber) = LOWER($1)";
+    const params = [trimmedRoll];
+
+    if (trimmedName) {
+      sql += " AND (LOWER(studentName) = LOWER($2) OR studentName IS NULL OR studentName = '')";
+      params.push(trimmedName);
+    }
+
+    await query.run(sql, params);
     return res.json({ success: true });
   } catch (err) {
     return res.status(500).json({ success: false, error: err.message });
@@ -1565,6 +1603,18 @@ app.delete("/api/notifications/clear", async (req, res) => {
 
 // Twilio WhatsApp Chatbot Webhook Endpoint (Future Chatbot Feature)
 app.post("/api/notifications/twilio-webhook", handleWhatsAppWebhook);
+
+// Serve frontend static build files if dist exists (Unified Single-Port Deployment)
+const frontendDistPath = path.join(__dirname, "../frontend/dist");
+if (fs.existsSync(frontendDistPath)) {
+  app.use(express.static(frontendDistPath));
+  app.get("*", (req, res, next) => {
+    if (req.path.startsWith("/api") || req.path.startsWith("/uploads")) {
+      return next();
+    }
+    res.sendFile(path.join(frontendDistPath, "index.html"));
+  });
+}
 
 // Start Server and Database initialization
 app.listen(PORT, async () => {
