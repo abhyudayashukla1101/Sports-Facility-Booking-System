@@ -277,7 +277,7 @@ export async function initDatabase() {
         capacity: 22,
         slotDuration: "90-min slots",
         hours: "6:00–21:00",
-        image: "https://images.unsplash.com/photo-1508098682722-e99c43a406b2?q=80&w=1200&auto=format&fit=crop",
+        image: "https://plus.unsplash.com/premium_photo-1684713510655-e6e31536168d?q=80&w=1470&auto=format&fit=crop&ixlib=rb-4.1.0&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D",
         description: "Full-size turf ground with floodlights, used for matches and practice.",
         rules: ["Studs only, no bare cleats on turf", "No food or drink on turf", "Coordinate with team captain before booking"]
       },
@@ -394,6 +394,16 @@ export async function initDatabase() {
       );
     }
   }
+
+  // Keep existing local databases in sync when a seeded facility image is replaced.
+  await query.run(
+    "UPDATE facilities SET image = $1 WHERE id = $2 AND image = $3",
+    [
+      "https://plus.unsplash.com/premium_photo-1684713510655-e6e31536168d?q=80&w=1470&auto=format&fit=crop&ixlib=rb-4.1.0&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D",
+      "main-football-ground",
+      "https://images.unsplash.com/photo-1508098682722-e99c43a406b2?q=80&w=1200&auto=format&fit=crop"
+    ]
+  );
 
   // Seed default reviews if reviews table is empty
   const reviewCount = await query.get("SELECT COUNT(*) as count FROM reviews");
