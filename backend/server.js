@@ -1220,22 +1220,22 @@ app.patch("/api/admin/facilities/:id/maintenance", async (req, res) => {
       return res.status(404).json({ error: "Facility not found" });
     }
 
-    if (lockVal === 1) {
-      try {
-        const facility = await query.get("SELECT name FROM facilities WHERE id = $1", [facilityId]);
-        const facilityName = facility ? facility.name : "Sports Facility";
+    try {
+      const facility = await query.get("SELECT name FROM facilities WHERE id = $1", [facilityId]);
+      const facilityName = facility ? facility.name : "Sports Facility";
 
-        // Query all registered campus student accounts across users, bookings, and waitlists
-        const allUsers = await query.all(`
-          SELECT DISTINCT rollNumber, name FROM (
-            SELECT rollNumber, name FROM users
-            UNION
-            SELECT rollNumber, studentName as name FROM bookings
-            UNION
-            SELECT rollNumber, studentName as name FROM waitlists
-          ) as u WHERE rollNumber IS NOT NULL AND rollNumber != ''
-        `);
+      // Query all registered campus student accounts across users, bookings, and waitlists
+      const allUsers = await query.all(`
+        SELECT DISTINCT rollNumber, name FROM (
+          SELECT rollNumber, name FROM users
+          UNION
+          SELECT rollNumber, studentName as name FROM bookings
+          UNION
+          SELECT rollNumber, studentName as name FROM waitlists
+        ) as u WHERE rollNumber IS NOT NULL AND rollNumber != ''
+      `);
 
+      if (lockVal === 1) {
         allUsers.forEach((student) => {
           const rNum = student.rollnumber || student.rollNumber;
           const sName = student.name || student.studentname || student.studentName || null;
@@ -1248,9 +1248,22 @@ app.patch("/api/admin/facilities/:id/maintenance", async (req, res) => {
             type: "CANCELLATION"
           });
         });
-      } catch (notifErr) {
-        console.warn("Notice dispatch error:", notifErr.message);
+      } else {
+        allUsers.forEach((student) => {
+          const rNum = student.rollnumber || student.rollNumber;
+          const sName = student.name || student.studentname || student.studentName || null;
+
+          dispatchNotification({
+            rollNumber: rNum,
+            studentName: sName,
+            title: `Ground Re-Opened & Clear to Use: ${facilityName} ✅`,
+            message: `Good news! Maintenance on ${facilityName} is complete. The ground is clear to use and open for slot reservations!`,
+            type: "CONFIRMATION"
+          });
+        });
       }
+    } catch (notifErr) {
+      console.warn("Notice dispatch error:", notifErr.message);
     }
 
     return res.json({ success: true });
@@ -1352,7 +1365,39 @@ app.post("/api/admin/maintenance-windows", async (req, res) => {
 
 app.delete("/api/admin/maintenance-windows/:id", async (req, res) => {
   try {
+    const window = await query.get("SELECT * FROM maintenance_windows WHERE id = $1", [req.params.id]);
     await query.run("DELETE FROM maintenance_windows WHERE id = $1", [req.params.id]);
+
+    if (window) {
+      const facilityName = window.facilityname || window.facilityName || "Sports Facility";
+      try {
+        const allUsers = await query.all(`
+          SELECT DISTINCT rollNumber, name FROM (
+            SELECT rollNumber, name FROM users
+            UNION
+            SELECT rollNumber, studentName as name FROM bookings
+            UNION
+            SELECT rollNumber, studentName as name FROM waitlists
+          ) as u WHERE rollNumber IS NOT NULL AND rollNumber != ''
+        `);
+
+        allUsers.forEach((student) => {
+          const rNum = student.rollnumber || student.rollNumber;
+          const sName = student.name || student.studentname || student.studentName || null;
+
+          dispatchNotification({
+            rollNumber: rNum,
+            studentName: sName,
+            title: `Ground Clear to Use: ${facilityName} ✅`,
+            message: `Good news! Scheduled maintenance for ${facilityName} has ended/cleared. Ground is now open and available for reservations!`,
+            type: "CONFIRMATION"
+          });
+        });
+      } catch (notifErr) {
+        console.warn("Notice dispatch error:", notifErr.message);
+      }
+    }
+
     return res.json({ success: true });
   } catch (err) {
     return res.status(500).json({ success: false, error: err.message });
