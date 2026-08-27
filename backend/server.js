@@ -1225,22 +1225,24 @@ app.patch("/api/admin/facilities/:id/maintenance", async (req, res) => {
         const facility = await query.get("SELECT name FROM facilities WHERE id = $1", [facilityId]);
         const facilityName = facility ? facility.name : "Sports Facility";
 
-        const studentsToNotify = await query.all(
-          `SELECT DISTINCT rollNumber FROM (
-            SELECT rollNumber FROM bookings WHERE facilityId = $1
+        // Query all registered campus student accounts across users, bookings, and waitlists
+        const allUsers = await query.all(`
+          SELECT DISTINCT rollNumber, name FROM (
+            SELECT rollNumber, name FROM users
             UNION
-            SELECT rollNumber FROM waitlists WHERE facilityId = $1
-          ) as u`,
-          [facilityId]
-        );
+            SELECT rollNumber, studentName as name FROM bookings
+            UNION
+            SELECT rollNumber, studentName as name FROM waitlists
+          ) as u WHERE rollNumber IS NOT NULL AND rollNumber != ''
+        `);
 
-        const targetRolls = studentsToNotify.length > 0
-          ? studentsToNotify.map((s) => s.rollnumber || s.rollNumber)
-          : (await query.all("SELECT DISTINCT rollNumber FROM bookings LIMIT 20")).map((s) => s.rollnumber || s.rollNumber);
+        allUsers.forEach((student) => {
+          const rNum = student.rollnumber || student.rollNumber;
+          const sName = student.name || student.studentname || student.studentName || null;
 
-        targetRolls.forEach((roll) => {
           dispatchNotification({
-            rollNumber: roll,
+            rollNumber: rNum,
+            studentName: sName,
             title: `Facility Maintenance Alert: ${facilityName} 🛠️`,
             message: `Notice: ${facilityName} has been temporarily locked for maintenance by Gymkhana Admin. Expected to re-open shortly.`,
             type: "CANCELLATION"
@@ -1302,24 +1304,25 @@ app.post("/api/admin/maintenance-windows", async (req, res) => {
 
     const window = await query.get("SELECT * FROM maintenance_windows WHERE id = $1", [id]);
 
-    // Dispatch in-app and Twilio SMS/WhatsApp notifications to students
+    // Dispatch in-app and Twilio SMS/WhatsApp notifications to all registered students
     try {
-      const studentsToNotify = await query.all(
-        `SELECT DISTINCT rollNumber FROM (
-          SELECT rollNumber FROM bookings WHERE facilityId = $1
+      const allUsers = await query.all(`
+        SELECT DISTINCT rollNumber, name FROM (
+          SELECT rollNumber, name FROM users
           UNION
-          SELECT rollNumber FROM waitlists WHERE facilityId = $1
-        ) as u`,
-        [facilityId]
-      );
+          SELECT rollNumber, studentName as name FROM bookings
+          UNION
+          SELECT rollNumber, studentName as name FROM waitlists
+        ) as u WHERE rollNumber IS NOT NULL AND rollNumber != ''
+      `);
 
-      const targetRolls = studentsToNotify.length > 0
-        ? studentsToNotify.map((s) => s.rollnumber || s.rollNumber)
-        : (await query.all("SELECT DISTINCT rollNumber FROM bookings LIMIT 20")).map((s) => s.rollnumber || s.rollNumber);
+      allUsers.forEach((student) => {
+        const rNum = student.rollnumber || student.rollNumber;
+        const sName = student.name || student.studentname || student.studentName || null;
 
-      targetRolls.forEach((roll) => {
         dispatchNotification({
-          rollNumber: roll,
+          rollNumber: rNum,
+          studentName: sName,
           title: `Facility Closure Notice: ${facility.name} 🛠️`,
           message: `Notice: ${facility.name} will be closed from ${startDate} to ${endDate}. Reason: ${reason}. Facilities will be accessible again from ${endDate}.`,
           type: "CANCELLATION"

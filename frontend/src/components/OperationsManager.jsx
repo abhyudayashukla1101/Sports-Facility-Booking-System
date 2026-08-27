@@ -51,6 +51,7 @@ export default function OperationsManager({ facilities = [] }) {
       queryClient.invalidateQueries({ queryKey: ["maintenanceWindows"] });
       queryClient.invalidateQueries({ queryKey: ["slots"] });
       queryClient.invalidateQueries({ queryKey: ["facilities"] });
+      queryClient.invalidateQueries({ queryKey: ["notifications"] });
       setToastMessage("Maintenance closure window scheduled!");
       setTimeout(() => setToastMessage(null), 4000);
     }
@@ -62,6 +63,7 @@ export default function OperationsManager({ facilities = [] }) {
       queryClient.invalidateQueries({ queryKey: ["maintenanceWindows"] });
       queryClient.invalidateQueries({ queryKey: ["slots"] });
       queryClient.invalidateQueries({ queryKey: ["facilities"] });
+      queryClient.invalidateQueries({ queryKey: ["notifications"] });
       setToastMessage("Maintenance window removed.");
       setTimeout(() => setToastMessage(null), 3000);
     }
