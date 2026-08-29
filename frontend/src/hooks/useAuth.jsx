@@ -1,7 +1,7 @@
 import { useState, useEffect, createContext, useContext } from "react";
 
 const AUTH_STORAGE_KEY = "playfield_iitg_auth_user";
-const BACKEND_URL = import.meta.env.VITE_API_BASE_URL ?? "http://localhost:8000";
+const BACKEND_URL = import.meta.env.PROD ? "" : (import.meta.env.VITE_API_BASE_URL ?? "http://localhost:8000");
 
 const AuthContext = createContext(null);
 
