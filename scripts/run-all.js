@@ -6,7 +6,7 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const rootDir = path.join(__dirname, "..");
 
 console.log("=================================================");
-console.log("🚀 Starting Playfield IITG (Backend & Frontend)");
+console.log("🚀 Starting Huddle IITG (Backend & Frontend)");
 console.log("=================================================\n");
 
 const isWin = process.platform === "win32";

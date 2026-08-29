@@ -7,20 +7,16 @@ import {
   MapPin,
   Clock,
   Users,
-  ArrowRight,
-  Pause,
-  Play,
-  Grid,
-  Layers
+  ArrowRight
 } from "lucide-react";
 
 export default function FacilitySlider({ facilities = [] }) {
   const navigate = useNavigate();
   const [currentIndex, setCurrentIndex] = useState(0);
-  const [isPaused, setIsPaused] = useState(false);
-  const [viewMode, setViewMode] = useState("slider"); // 'slider' or 'grid'
+  const [isHovered, setIsHovered] = useState(false);
 
   const timerRef = useRef(null);
+  const thumbRefs = useRef([]);
 
   const total = facilities.length;
 
@@ -35,18 +31,29 @@ export default function FacilitySlider({ facilities = [] }) {
     setCurrentIndex((prev) => (prev - 1 + total) % total);
   };
 
-  // Auto-slide effect (2 seconds interval)
+  // Smooth auto-slide (3s interval)
   useEffect(() => {
-    if (total === 0 || isPaused || viewMode !== "slider") return;
+    if (total === 0 || isHovered) return;
 
     timerRef.current = setInterval(() => {
       nextSlide();
-    }, 2000);
+    }, 3000);
 
     return () => {
       if (timerRef.current) clearInterval(timerRef.current);
     };
-  }, [total, isPaused, viewMode, currentIndex]);
+  }, [total, isHovered, currentIndex]);
+
+  // Auto-scroll active thumbnail into view
+  useEffect(() => {
+    if (thumbRefs.current[currentIndex]) {
+      thumbRefs.current[currentIndex].scrollIntoView({
+        behavior: "smooth",
+        inline: "center",
+        block: "nearest"
+      });
+    }
+  }, [currentIndex]);
 
   if (!facilities || facilities.length === 0) {
     return null;
@@ -72,46 +79,21 @@ export default function FacilitySlider({ facilities = [] }) {
         </div>
 
         <div className="flex items-center gap-3">
-          {/* View Mode Toggle */}
-          <div className="flex items-center rounded-full border border-surface-border bg-surface p-1 shadow-inner">
-            <button
-              onClick={() => setViewMode("slider")}
-              className={`flex items-center gap-1.5 rounded-full px-3.5 py-1.5 text-xs font-bold transition ${
-                viewMode === "slider"
-                  ? "bg-accent text-accent-foreground shadow-md"
-                  : "text-muted hover:text-white"
-              }`}
-            >
-              <Layers className="h-3.5 w-3.5" /> Auto Slider
-            </button>
-            <button
-              onClick={() => setViewMode("grid")}
-              className={`flex items-center gap-1.5 rounded-full px-3.5 py-1.5 text-xs font-bold transition ${
-                viewMode === "grid"
-                  ? "bg-accent text-accent-foreground shadow-md"
-                  : "text-muted hover:text-white"
-              }`}
-            >
-              <Grid className="h-3.5 w-3.5" /> Grid View
-            </button>
-          </div>
-
           <Link
             to="/facilities"
-            className="hidden sm:flex items-center gap-1 text-xs font-bold text-accent hover:underline"
+            className="flex items-center gap-1.5 rounded-full border border-surface-border bg-surface px-4 py-2 text-xs font-extrabold text-accent hover:border-accent/50 hover:bg-surface-hover transition shadow-md"
           >
-            View All ({total}) <ChevronRight className="h-4 w-4" />
+            View All Facilities ({total}) <ChevronRight className="h-4 w-4" />
           </Link>
         </div>
       </div>
 
-      {viewMode === "slider" ? (
-        /* AUTOMATICALLY SLIDING HERO CAROUSEL */
-        <div
-          onMouseEnter={() => setIsPaused(true)}
-          onMouseLeave={() => setIsPaused(false)}
-          className="relative overflow-hidden rounded-3xl border border-surface-border/90 bg-surface shadow-2xl transition-all"
-        >
+      {/* AUTOMATICALLY SLIDING HERO CAROUSEL */}
+      <div
+        onMouseEnter={() => setIsHovered(true)}
+        onMouseLeave={() => setIsHovered(false)}
+        className="relative overflow-hidden rounded-3xl border border-surface-border/90 bg-surface shadow-2xl transition-all"
+      >
           {/* HERO IMAGE CONTAINER WITH FADE TRANSITION */}
           <div className="relative h-[420px] sm:h-[480px] w-full overflow-hidden bg-base">
             <img
@@ -135,48 +117,29 @@ export default function FacilitySlider({ facilities = [] }) {
               </span>
             </div>
 
-            {/* PAUSE / PLAY INDICATOR STATUS */}
-            <div className="absolute right-6 top-6 flex items-center gap-2">
-              <button
-                onClick={() => setIsPaused(!isPaused)}
-                className="flex items-center gap-1.5 rounded-full border border-white/20 bg-black/40 px-3 py-1 text-[11px] font-bold text-white/90 backdrop-blur-md hover:bg-black/60 transition shadow-md"
-                title={isPaused ? "Resume auto-slide" : "Pause auto-slide"}
-              >
-                {isPaused ? (
-                  <>
-                    <Play className="h-3 w-3 fill-current text-accent" /> Paused
-                  </>
-                ) : (
-                  <>
-                    <Pause className="h-3 w-3 fill-current text-white/80" /> Auto Sliding (2s)
-                  </>
-                )}
-              </button>
-            </div>
-
             {/* MAIN OVERLAY CONTENT */}
             <div className="absolute bottom-0 left-0 right-0 p-6 sm:p-10 space-y-4 max-w-3xl">
               <div>
-                <span className="flex items-center gap-1.5 text-xs font-bold text-muted">
+                <span className="flex items-center gap-1.5 text-xs font-bold text-white drop-shadow-sm">
                   <MapPin className="h-4 w-4 text-accent" /> {currentFacility.location}
                 </span>
-                <h3 className="mt-1 font-display text-3xl font-extrabold text-white sm:text-5xl tracking-tight leading-tight">
+                <h3 className="mt-1 font-display text-3xl font-extrabold text-white sm:text-5xl tracking-tight leading-tight drop-shadow-md">
                   {currentFacility.name}
                 </h3>
-                <p className="mt-2 text-sm text-muted/90 sm:text-base font-medium line-clamp-2 max-w-2xl leading-relaxed">
+                <p className="mt-2 text-base text-white font-bold sm:text-lg line-clamp-2 max-w-2xl leading-relaxed drop-shadow-md">
                   {currentFacility.description}
                 </p>
               </div>
 
               {/* FACILITY METRICS */}
-              <div className="flex flex-wrap items-center gap-4 text-xs font-semibold text-white/80 pt-1">
-                <span className="flex items-center gap-1.5 rounded-xl border border-surface-border bg-base/60 px-3 py-1.5 backdrop-blur-md">
+              <div className="flex flex-wrap items-center gap-4 text-xs font-bold text-white pt-1">
+                <span className="flex items-center gap-1.5 rounded-xl border border-surface-border bg-base/80 px-3 py-1.5 backdrop-blur-md">
                   <Clock className="h-3.5 w-3.5 text-accent" /> Hours: {currentFacility.hours}
                 </span>
-                <span className="flex items-center gap-1.5 rounded-xl border border-surface-border bg-base/60 px-3 py-1.5 backdrop-blur-md">
+                <span className="flex items-center gap-1.5 rounded-xl border border-surface-border bg-base/80 px-3 py-1.5 backdrop-blur-md">
                   <Users className="h-3.5 w-3.5 text-accent" /> Capacity: {currentFacility.capacity} players
                 </span>
-                <span className="rounded-xl border border-surface-border bg-base/60 px-3 py-1.5 backdrop-blur-md text-accent font-bold">
+                <span className="rounded-xl border border-surface-border bg-base/80 px-3 py-1.5 backdrop-blur-md text-accent font-extrabold">
                   {currentFacility.slotDuration}
                 </span>
               </div>
@@ -187,7 +150,7 @@ export default function FacilitySlider({ facilities = [] }) {
                   onClick={() => navigate(`/facilities/${currentFacility.id}`)}
                   className="inline-flex items-center gap-2.5 rounded-full bg-accent px-7 py-3 text-sm font-extrabold text-accent-foreground shadow-xl shadow-accent/20 transition hover:brightness-110 hover:scale-105 active:scale-95"
                 >
-                  Book {currentFacility.name} Court <ArrowRight className="h-4 w-4" />
+                  Book {currentFacility.name} <ArrowRight className="h-4 w-4" />
                 </button>
               </div>
             </div>
@@ -232,11 +195,12 @@ export default function FacilitySlider({ facilities = [] }) {
               </div>
             </div>
 
-            {/* Horizontal Scrollable Thumbnails */}
-            <div className="flex items-center gap-3 overflow-x-auto pb-1 pt-1 no-scrollbar">
+            {/* Horizontal Scrollable Thumbnails (Scrollbars strictly hidden) */}
+            <div className="flex items-center gap-3 overflow-x-auto pb-1 pt-1 no-scrollbar [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden">
               {facilities.map((fac, idx) => (
                 <div
                   key={fac.id}
+                  ref={(el) => (thumbRefs.current[idx] = el)}
                   onClick={() => setCurrentIndex(idx)}
                   className={`group relative flex-shrink-0 w-36 h-20 rounded-xl overflow-hidden cursor-pointer border transition-all ${
                     idx === currentIndex
@@ -258,56 +222,6 @@ export default function FacilitySlider({ facilities = [] }) {
             </div>
           </div>
         </div>
-      ) : (
-        /* FALLBACK GRID VIEW IF TOGGLED */
-        <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3">
-          {facilities.map((fac) => (
-            <div
-              key={fac.id}
-              onClick={() => navigate(`/facilities/${fac.id}`)}
-              className="group flex flex-col overflow-hidden rounded-2xl border border-surface-border/90 bg-surface/90 transition-all duration-300 hover:border-accent/50 hover:shadow-2xl hover:-translate-y-1 cursor-pointer"
-            >
-              <div className="relative h-48 w-full overflow-hidden bg-base">
-                <img
-                  src={fac.image}
-                  alt={fac.name}
-                  className="h-full w-full object-cover transition-transform duration-500 group-hover:scale-105"
-                />
-                <div className="absolute inset-0 bg-gradient-to-t from-surface via-transparent to-black/30 opacity-80" />
-
-                <span className="absolute left-3 top-3 rounded-full bg-base/85 px-3 py-1 text-[11px] font-extrabold text-white backdrop-blur-md border border-white/10 uppercase">
-                  {fac.sport}
-                </span>
-
-                <span className="absolute right-3 top-3 flex items-center gap-1 rounded-full bg-accent px-2.5 py-1 text-[11px] font-extrabold text-accent-foreground shadow-md">
-                  <Star className="h-3 w-3 fill-current" strokeWidth={0} />
-                  {fac.rating}
-                </span>
-              </div>
-
-              <div className="flex flex-1 flex-col justify-between p-5 space-y-4">
-                <div>
-                  <h3 className="font-display text-xl font-bold text-white group-hover:text-accent transition-colors">
-                    {fac.name}
-                  </h3>
-                  <p className="text-xs text-muted/90 mt-1 line-clamp-2 leading-relaxed">
-                    {fac.description}
-                  </p>
-                </div>
-
-                <div className="pt-3 border-t border-surface-border/60 flex items-center justify-between text-xs font-semibold text-muted">
-                  <span className="flex items-center gap-1">
-                    <MapPin className="h-3.5 w-3.5 text-muted" /> {fac.location.split(",")[0]}
-                  </span>
-                  <span className="text-accent font-bold flex items-center gap-1">
-                    Book Court <ArrowRight className="h-3.5 w-3.5" />
-                  </span>
-                </div>
-              </div>
-            </div>
-          ))}
-        </div>
-      )}
     </div>
   );
 }

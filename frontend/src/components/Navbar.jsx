@@ -27,7 +27,7 @@ export default function Navbar() {
             </span>
             <span className="leading-tight">
               <span className="block font-display text-base font-bold tracking-tight text-white">
-                Playfield
+                Huddle
               </span>
               <span className="block text-[10px] font-semibold tracking-wider text-muted">
                 IIT GUWAHATI

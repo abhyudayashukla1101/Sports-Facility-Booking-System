@@ -237,143 +237,143 @@ export async function initDatabase() {
   }
 
   // Seed default data if facilities table is empty
+  const MOCK_FACILITIES = [
+    {
+      id: "badminton-hall",
+      name: "Badminton Hall",
+      sport: "Badminton",
+      rating: 4.9,
+      location: "SAC Indoor Hall, First Floor",
+      capacity: 8,
+      slotDuration: "60-min slots",
+      hours: "6:00–22:00",
+      image: "/images/facilities/badminton-hall.jpg",
+      description: "Four wooden indoor courts with anti-glare lighting inside the SAC hall.",
+      rules: ["Indoor shoes compulsory", "Shuttles not provided", "Switch off lights after use"]
+    },
+    {
+      id: "basketball-court",
+      name: "Basketball Court",
+      sport: "Basketball",
+      rating: 4.6,
+      location: "Behind SAC Building",
+      capacity: 12,
+      slotDuration: "60-min slots",
+      hours: "6:00–22:00",
+      image: "/images/facilities/basketball-court.jpg",
+      description: "Outdoor full court with floodlights for evening play.",
+      rules: ["No metal studs", "Report damaged nets to admin", "Switch off lights after use"]
+    },
+    {
+      id: "main-football-ground",
+      name: "Main Football Ground",
+      sport: "Football",
+      rating: 4.7,
+      location: "Sports Complex Central Field",
+      capacity: 22,
+      slotDuration: "90-min slots",
+      hours: "6:00–21:00",
+      image: "/images/facilities/main-football-ground.jpg",
+      description: "Full-size turf ground with floodlights, used for matches and practice.",
+      rules: ["Studs only, no bare cleats on turf", "No food or drink on turf", "Coordinate with team captain before booking"]
+    },
+    {
+      id: "sac-cricket-ground",
+      name: "SAC Cricket Ground",
+      sport: "Cricket",
+      rating: 4.8,
+      location: "Sports Complex, near Lohit Hostel",
+      capacity: 22,
+      slotDuration: "120-min slots",
+      hours: "6:00–21:00",
+      image: "/images/facilities/sac-cricket-ground.jpg",
+      description: "Full cricket ground with practice nets on the side.",
+      rules: ["Book nets separately for practice", "No tennis-ball cricket on match days", "Roll the pitch cover back after use"]
+    },
+    {
+      id: "sac-gymnasium",
+      name: "SAC Gymnasium",
+      sport: "Gym",
+      rating: 4.8,
+      location: "SAC Ground Floor",
+      capacity: 30,
+      slotDuration: "60-min slots",
+      hours: "5:00–22:00",
+      image: "https://images.unsplash.com/photo-1534438327276-14e5300c3a48?q=80&w=1200&auto=format&fit=crop",
+      description: "Free weights, machines, and cardio equipment across two rooms.",
+      rules: ["Gym attire and shoes required", "Wipe down equipment after use", "Re-rack weights"]
+    },
+    {
+      id: "squash-court",
+      name: "Squash Court",
+      sport: "Squash",
+      rating: 4.5,
+      location: "SAC Indoor Hall",
+      capacity: 4,
+      slotDuration: "60-min slots",
+      hours: "6:00–22:00",
+      image: "/images/facilities/squash-court.jpg",
+      description: "Two glass-backed squash courts, racquets available on request.",
+      rules: ["Non-marking shoes only", "Eye protection recommended", "Max 2 players per slot"]
+    },
+    {
+      id: "swimming-pool",
+      name: "Swimming Pool",
+      sport: "Swimming",
+      rating: 4.6,
+      location: "Aquatics Complex",
+      capacity: 24,
+      slotDuration: "60-min slots",
+      hours: "6:00–20:00",
+      image: "/images/facilities/swimming-pool.jpg",
+      description: "Eight-lane outdoor pool, lifeguard on duty during all open slots.",
+      rules: ["Shower before entering", "Swim cap mandatory", "No diving in shallow end"]
+    },
+    {
+      id: "table-tennis-room",
+      name: "Table Tennis Room",
+      sport: "Table Tennis",
+      rating: 4.5,
+      location: "SAC Indoor Hall, Ground Floor",
+      capacity: 12,
+      slotDuration: "60-min slots",
+      hours: "6:00–22:00",
+      image: "/images/facilities/table-tennis-room.png",
+      description: "Six tables in a climate-controlled room, paddles available at the counter.",
+      rules: ["Bring your own paddle or borrow at counter", "Max 4 players per table", "Quiet hours after 9pm"]
+    },
+    {
+      id: "tennis-court",
+      name: "Tennis Court",
+      sport: "Tennis",
+      rating: 4.7,
+      location: "SAC Tennis Complex",
+      capacity: 6,
+      slotDuration: "60-min slots",
+      hours: "6:00–22:00",
+      image: "/images/facilities/tennis-court.jpg",
+      description: "Two hard courts near the hostel wing, lit for night play.",
+      rules: ["Non-marking shoes only", "Singles or doubles bookings allowed", "Return court to admin if unused after 10 min"]
+    },
+    {
+      id: "volleyball-court",
+      name: "Volleyball Court",
+      sport: "Volleyball",
+      rating: 4.4,
+      location: "Sports Complex, East Field",
+      capacity: 12,
+      slotDuration: "60-min slots",
+      hours: "6:00–21:00",
+      image: "https://images.unsplash.com/photo-1612872087720-bb876e2e67d1?q=80&w=1200&auto=format&fit=crop",
+      description: "Sand and hard-court volleyball setups side by side.",
+      rules: ["Bare feet allowed on sand court only", "Nets must be re-tensioned after use", "No spikes on hard court"]
+    }
+  ];
+
   const facilityCount = await query.get("SELECT COUNT(*) as count FROM facilities");
   const fCount = parseInt(facilityCount ? facilityCount.count : 0, 10);
   if (fCount === 0) {
     console.log("Seeding initial facility data...");
-    const MOCK_FACILITIES = [
-      {
-        id: "badminton-hall",
-        name: "Badminton Hall",
-        sport: "Badminton",
-        rating: 4.9,
-        location: "SAC Indoor Hall, First Floor",
-        capacity: 8,
-        slotDuration: "60-min slots",
-        hours: "6:00–22:00",
-        image: "https://images.unsplash.com/photo-1626224583764-f87db24ac4ea?q=80&w=1200&auto=format&fit=crop",
-        description: "Four wooden indoor courts with anti-glare lighting inside the SAC hall.",
-        rules: ["Indoor shoes compulsory", "Shuttles not provided", "Switch off lights after use"]
-      },
-      {
-        id: "basketball-court",
-        name: "Basketball Court",
-        sport: "Basketball",
-        rating: 4.6,
-        location: "Behind SAC Building",
-        capacity: 12,
-        slotDuration: "60-min slots",
-        hours: "6:00–22:00",
-        image: "https://images.unsplash.com/photo-1546519638-68e109498ffc?q=80&w=1200&auto=format&fit=crop",
-        description: "Outdoor full court with floodlights for evening play.",
-        rules: ["No metal studs", "Report damaged nets to admin", "Switch off lights after use"]
-      },
-      {
-        id: "main-football-ground",
-        name: "Main Football Ground",
-        sport: "Football",
-        rating: 4.7,
-        location: "Sports Complex Central Field",
-        capacity: 22,
-        slotDuration: "90-min slots",
-        hours: "6:00–21:00",
-        image: "https://images.unsplash.com/photo-1508098682722-e99c43a406b2?q=80&w=1200&auto=format&fit=crop",
-        description: "Full-size turf ground with floodlights, used for matches and practice.",
-        rules: ["Studs only, no bare cleats on turf", "No food or drink on turf", "Coordinate with team captain before booking"]
-      },
-      {
-        id: "sac-cricket-ground",
-        name: "SAC Cricket Ground",
-        sport: "Cricket",
-        rating: 4.8,
-        location: "Sports Complex, near Lohit Hostel",
-        capacity: 22,
-        slotDuration: "120-min slots",
-        hours: "6:00–21:00",
-        image: "https://images.unsplash.com/photo-1531415074968-036ba1b575da?q=80&w=1200&auto=format&fit=crop",
-        description: "Full cricket ground with practice nets on the side.",
-        rules: ["Book nets separately for practice", "No tennis-ball cricket on match days", "Roll the pitch cover back after use"]
-      },
-      {
-        id: "sac-gymnasium",
-        name: "SAC Gymnasium",
-        sport: "Gym",
-        rating: 4.8,
-        location: "SAC Ground Floor",
-        capacity: 30,
-        slotDuration: "60-min slots",
-        hours: "5:00–22:00",
-        image: "https://images.unsplash.com/photo-1534438327276-14e5300c3a48?q=80&w=1200&auto=format&fit=crop",
-        description: "Free weights, machines, and cardio equipment across two rooms.",
-        rules: ["Gym attire and shoes required", "Wipe down equipment after use", "Re-rack weights"]
-      },
-      {
-        id: "squash-court",
-        name: "Squash Court",
-        sport: "Squash",
-        rating: 4.5,
-        location: "SAC Indoor Hall",
-        capacity: 4,
-        slotDuration: "60-min slots",
-        hours: "6:00–22:00",
-        image: "https://images.unsplash.com/photo-1587280501635-68a0e82cd5ff?q=80&w=1200&auto=format&fit=crop",
-        description: "Two glass-backed squash courts, racquets available on request.",
-        rules: ["Non-marking shoes only", "Eye protection recommended", "Max 2 players per slot"]
-      },
-      {
-        id: "swimming-pool",
-        name: "Swimming Pool",
-        sport: "Swimming",
-        rating: 4.6,
-        location: "Aquatics Complex",
-        capacity: 24,
-        slotDuration: "60-min slots",
-        hours: "6:00–20:00",
-        image: "https://images.unsplash.com/photo-1576013551627-0cc20b96c2a7?q=80&w=1200&auto=format&fit=crop",
-        description: "Eight-lane outdoor pool, lifeguard on duty during all open slots.",
-        rules: ["Shower before entering", "Swim cap mandatory", "No diving in shallow end"]
-      },
-      {
-        id: "table-tennis-room",
-        name: "Table Tennis Room",
-        sport: "Table Tennis",
-        rating: 4.5,
-        location: "SAC Indoor Hall, Ground Floor",
-        capacity: 12,
-        slotDuration: "60-min slots",
-        hours: "6:00–22:00",
-        image: "https://images.unsplash.com/photo-1609710228159-0fa9bd7c0827?q=80&w=1200&auto=format&fit=crop",
-        description: "Six tables in a climate-controlled room, paddles available at the counter.",
-        rules: ["Bring your own paddle or borrow at counter", "Max 4 players per table", "Quiet hours after 9pm"]
-      },
-      {
-        id: "tennis-court",
-        name: "Tennis Court",
-        sport: "Tennis",
-        rating: 4.7,
-        location: "SAC Tennis Complex",
-        capacity: 6,
-        slotDuration: "60-min slots",
-        hours: "6:00–22:00",
-        image: "https://images.unsplash.com/photo-1595435934249-5df7ed86e1c0?q=80&w=1200&auto=format&fit=crop",
-        description: "Two hard courts near the hostel wing, lit for night play.",
-        rules: ["Non-marking shoes only", "Singles or doubles bookings allowed", "Return court to admin if unused after 10 min"]
-      },
-      {
-        id: "volleyball-court",
-        name: "Volleyball Court",
-        sport: "Volleyball",
-        rating: 4.4,
-        location: "Sports Complex, East Field",
-        capacity: 12,
-        slotDuration: "60-min slots",
-        hours: "6:00–21:00",
-        image: "https://images.unsplash.com/photo-1612872087720-bb876e2e67d1?q=80&w=1200&auto=format&fit=crop",
-        description: "Sand and hard-court volleyball setups side by side.",
-        rules: ["Bare feet allowed on sand court only", "Nets must be re-tensioned after use", "No spikes on hard court"]
-      }
-    ];
-
     for (const f of MOCK_FACILITIES) {
       await query.run(
         `INSERT INTO facilities (id, name, sport, rating, location, capacity, slotDuration, hours, image, description, rules) 
@@ -391,6 +391,14 @@ export async function initDatabase() {
           f.description,
           JSON.stringify(f.rules)
         ]
+      );
+    }
+  } else {
+    // Update existing facilities to real image URLs
+    for (const f of MOCK_FACILITIES) {
+      await query.run(
+        `UPDATE facilities SET image = $1 WHERE id = $2`,
+        [f.image, f.id]
       );
     }
   }

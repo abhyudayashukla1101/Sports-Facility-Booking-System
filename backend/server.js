@@ -22,8 +22,9 @@ if (!fs.existsSync(uploadsDir)) {
   fs.mkdirSync(uploadsDir, { recursive: true });
 }
 
-// Serve static uploads
+// Serve static uploads and images
 app.use("/uploads", express.static(uploadsDir));
+app.use("/images", express.static(path.join(__dirname, "public", "images")));
 
 // Helper: Generate Unique ID
 function generateId(prefix = "") {

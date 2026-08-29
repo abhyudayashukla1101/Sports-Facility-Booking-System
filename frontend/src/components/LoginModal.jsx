@@ -105,7 +105,7 @@ export default function LoginModal({ onClose, onSuccess, initialTab = "student",
         <div className="flex items-center justify-between border-b border-surface-border p-5 bg-surface-hover/40">
           <div>
             <span className="text-[11px] font-bold tracking-wider text-accent uppercase">
-              Playfield IIT Guwahati
+              Huddle IIT Guwahati
             </span>
             <h3 className="font-display text-xl font-bold text-white">
               {activeTab === "register" ? "Create New Account" : "Account Authentication"}

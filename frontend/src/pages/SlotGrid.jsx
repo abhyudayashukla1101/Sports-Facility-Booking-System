@@ -282,7 +282,7 @@ export default function SlotGrid() {
             </span>
           </div>
 
-          <p className="mt-4 max-w-3xl text-sm leading-relaxed text-muted/90 sm:text-base">
+          <p className="mt-4 max-w-3xl text-sm leading-relaxed text-white/90 sm:text-base font-medium">
             {facility.description}
           </p>
         </div>

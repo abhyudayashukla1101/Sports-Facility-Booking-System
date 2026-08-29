@@ -21,7 +21,7 @@ export default {
         available: "#3ecf6e",   // slot available
         booked: "#f2545b",      // slot taken / rejected
         passed: "#5b6272",      // slot passed / disabled
-        muted: "#8b93a7",       // secondary text
+        muted: "#cbd5e1",       // secondary text (bright readable gray)
       },
       fontFamily: {
         display: ["'Space Grotesk'", "system-ui", "sans-serif"],

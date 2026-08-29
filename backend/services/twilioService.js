@@ -6,7 +6,11 @@ dotenv.config();
 const accountSid = process.env.TWILIO_ACCOUNT_SID;
 const authToken = process.env.TWILIO_AUTH_TOKEN;
 const fromPhone = process.env.TWILIO_PHONE_NUMBER;
-const fromWhatsApp = process.env.TWILIO_WHATSAPP_NUMBER || "whatsapp:+14155238886";
+
+const rawWhatsAppEnv = process.env.TWILIO_WHATSAPP_NUMBER || "+14155238886";
+const fromWhatsApp = rawWhatsAppEnv.startsWith("whatsapp:")
+  ? rawWhatsAppEnv
+  : `whatsapp:${rawWhatsAppEnv}`;
 
 let twilioClient = null;
 
@@ -32,10 +36,28 @@ function generateId(prefix = "notif") {
   return `${prefix}_${Date.now().toString().slice(-6)}_${Math.random().toString(36).substr(2, 4)}`;
 }
 
+// Helper to escape XML for TwiML responses
+function escapeXml(unsafe) {
+  if (!unsafe) return "";
+  return unsafe
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&apos;");
+}
+
 /**
  * Dispatch notification across In-App Feed and Twilio SMS / WhatsApp
  */
-export async function dispatchNotification({ rollNumber, studentName = null, title, message, type = "CONFIRMATION", phone = null }) {
+export async function dispatchNotification({
+  rollNumber,
+  studentName = null,
+  title,
+  message,
+  type = "CONFIRMATION",
+  phone = null
+}) {
   const notifId = generateId("notif");
   const createdAt = new Date().toISOString();
 
@@ -54,33 +76,41 @@ export async function dispatchNotification({ rollNumber, studentName = null, tit
   let targetPhone = phone;
   if (!targetPhone && rollNumber) {
     try {
-      const userRow = await query.get("SELECT phone FROM users WHERE rollNumber = $1", [rollNumber]);
+      const userRow = await query.get("SELECT phone FROM users WHERE LOWER(rollNumber) = LOWER($1)", [
+        rollNumber.trim()
+      ]);
       if (userRow && userRow.phone) {
         targetPhone = userRow.phone;
       }
     } catch (e) {}
   }
 
-  // 2. Dispatch Twilio SMS / WhatsApp if phone number & credentials available
+  // 2. Dispatch Twilio SMS & WhatsApp if phone number & credentials available
   const client = await getTwilioClient();
   if (client && targetPhone) {
-    const rawPhone = targetPhone.replace("whatsapp:", "").trim();
-    const formattedPhone = rawPhone.startsWith("+") ? rawPhone : `+91${rawPhone}`;
+    const rawPhoneDigits = targetPhone.replace("whatsapp:", "").trim();
+    const formattedPhone = rawPhoneDigits.startsWith("+")
+      ? rawPhoneDigits
+      : `+91${rawPhoneDigits}`;
     const whatsappPhone = `whatsapp:${formattedPhone}`;
 
-    try {
-      // Send SMS if fromPhone is configured
-      if (fromPhone) {
+    // Send SMS if fromPhone is configured
+    if (fromPhone && fromPhone.trim()) {
+      try {
         await client.messages.create({
-          body: `[Playfield IITG] ${title}\n${message}`,
-          from: fromPhone,
+          body: `[Huddle IITG] ${title}\n${message}`,
+          from: fromPhone.trim(),
           to: formattedPhone
         });
         console.log(`[Twilio SMS Sent] to ${formattedPhone}: ${title}`);
+      } catch (smsErr) {
+        console.warn(`[Twilio SMS Notice] ${smsErr.message}`);
       }
+    }
 
-      // Send WhatsApp message if fromWhatsApp is configured
-      if (fromWhatsApp) {
+    // Send WhatsApp message if fromWhatsApp is configured
+    if (fromWhatsApp) {
+      try {
         const contentSid = process.env.TWILIO_CONTENT_SID;
         if (contentSid) {
           await client.messages.create({
@@ -92,26 +122,25 @@ export async function dispatchNotification({ rollNumber, studentName = null, tit
           console.log(`[Twilio WhatsApp Template Sent] to ${whatsappPhone}: ${title}`);
         } else {
           await client.messages.create({
-            body: `*Playfield IITG Notification*\n\n*${title}*\n${message}`,
+            body: `*Huddle IITG Notification*\n\n*${title}*\n${message}`,
             from: fromWhatsApp,
             to: whatsappPhone
           });
           console.log(`[Twilio WhatsApp Sent] to ${whatsappPhone}: ${title}`);
         }
+      } catch (waErr) {
+        console.warn(`[Twilio WhatsApp Notice] ${waErr.message}`);
       }
-    } catch (twilioErr) {
-      console.warn(`[Twilio Dispatch Notice] ${twilioErr.message}`);
     }
   } else {
-    console.log(`[Notification Dispatched (In-App)] [${type}] to Roll: ${rollNumber} | ${title}: ${message}`);
+    console.log(
+      `[Notification Dispatched (In-App)] [${type}] to Roll: ${rollNumber} | ${title}: ${message}`
+    );
   }
 
-  return { id: notifId, rollNumber, title, message, type, createdAt };
+  return { id: notifId, rollNumber, studentName, title, message, type, createdAt };
 }
 
-/**
- * Placeholder Webhook for future Twilio WhatsApp Chatbot Feature
- */
 /**
  * Full Interactive Twilio WhatsApp Chatbot Engine
  */
@@ -120,8 +149,9 @@ export async function handleWhatsAppWebhook(req, res) {
   const rawMsg = (Body || "").trim();
   const upperMsg = rawMsg.toUpperCase();
   const rawPhone = (From || "").replace("whatsapp:", "").trim();
+  const phone10Digits = rawPhone.replace(/\D/g, "").slice(-10);
 
-  console.log(`[Twilio WhatsApp Chatbot] Received message from ${From}: "${rawMsg}"`);
+  console.log(`[Twilio WhatsApp Chatbot] Received message from ${From} (${phone10Digits}): "${rawMsg}"`);
 
   let replyText = "";
   const todayStr = new Date().toISOString().split("T")[0];
@@ -129,13 +159,15 @@ export async function handleWhatsAppWebhook(req, res) {
   // Try to resolve student by phone number
   let student = null;
   try {
-    if (rawPhone) {
+    if (phone10Digits && phone10Digits.length >= 10) {
       student = await query.get(
         "SELECT * FROM users WHERE phone LIKE $1 OR phone = $2",
-        [`%${rawPhone.slice(-10)}%`, rawPhone]
+        [`%${phone10Digits}%`, rawPhone]
       );
     }
-  } catch (e) {}
+  } catch (e) {
+    console.warn("WhatsApp user lookup warning:", e.message);
+  }
 
   // 1. COMMAND: SLOTS / 1
   if (upperMsg === "SLOTS" || upperMsg === "1") {
@@ -165,11 +197,11 @@ export async function handleWhatsAppWebhook(req, res) {
   // 2. COMMAND: MY BOOKINGS / 2
   else if (upperMsg.includes("MY BOOKING") || upperMsg === "2" || upperMsg === "MYBOOKINGS") {
     if (!student) {
-      replyText = "⚠️ Phone number not registered. Please sign in on http://localhost:3000 to link your account.";
+      replyText = "⚠️ Your phone number is not linked to an account yet. Please register your phone number on http://localhost:5173 to sync bookings!";
     } else {
       try {
         const bookings = await query.all(
-          "SELECT * FROM bookings WHERE rollNumber = $1 AND status = 'CONFIRMED' ORDER BY dateKey ASC",
+          "SELECT * FROM bookings WHERE LOWER(rollNumber) = LOWER($1) AND status = 'CONFIRMED' ORDER BY dateKey ASC",
           [student.rollnumber || student.rollNumber]
         );
 
@@ -191,11 +223,11 @@ export async function handleWhatsAppWebhook(req, res) {
     try {
       const windows = await query.all("SELECT * FROM maintenance_windows WHERE endDate >= $1", [todayStr]);
       if (windows.length === 0) {
-        replyText = "🟢 *All IITG Sports Facilities are Operational*! Normal hours 6:00 AM – 10:00 PM.";
+        replyText = "🟢 *All IITG Sports Facilities are Operational*! Operating hours 6:00 AM – 10:00 PM.";
       } else {
         replyText = "🚧 *IITG Ground Maintenance Status*:\n\n";
         windows.forEach((w) => {
-          replyText += `• *Facility*: ${w.facilityid || w.facilityId}\n  Window: ${w.startdate || w.startDate} to ${w.enddate || w.endDate}\n  Reason: ${w.reason}\n\n`;
+          replyText += `• *Facility*: ${w.facilityname || w.facilityName || w.facilityid}\n  Window: ${w.startdate || w.startDate} to ${w.enddate || w.endDate}\n  Reason: ${w.reason}\n\n`;
         });
       }
     } catch (err) {
@@ -220,7 +252,7 @@ export async function handleWhatsAppWebhook(req, res) {
         if (!targetFac) {
           replyText = `❌ Facility '${parts[1]}' not found. Reply *SLOTS* to see valid grounds.`;
         } else {
-          const studentName = student ? student.name : "WhatsApp User";
+          const studentName = student ? student.name : "WhatsApp Student";
           const studentRoll = student ? (student.rollnumber || student.rollNumber) : "220101045";
           const studentHostel = student ? student.hostel : "Lohit";
 
@@ -277,13 +309,12 @@ export async function handleWhatsAppWebhook(req, res) {
   // DEFAULT: MENU / HI / HELP
   else {
     const studentGreeting = student ? `Hi ${student.name}!` : "Welcome!";
-    replyText = `🎾 *IIT Guwahati Sports Facilities WhatsApp Bot* 🏸\n\n${studentGreeting} Reply with any command:\n\n1️⃣ *SLOTS* - View today's open courts\n2️⃣ *MY BOOKINGS* - Check your reservations\n3️⃣ *STATUS* - Ground upkeep status\n4️⃣ *BOOK <Facility> <Slot>* - Reserve (e.g. *BOOK Badminton 5pm*)\n\nOr visit: http://localhost:3000`;
+    replyText = `🎾 *IIT Guwahati Sports Facilities WhatsApp Bot* 🏸\n\n${studentGreeting} Reply with any command:\n\n1️⃣ *SLOTS* - View today's open courts\n2️⃣ *MY BOOKINGS* - Check your reservations\n3️⃣ *STATUS* - Ground upkeep status\n4️⃣ *BOOK <Facility> <Slot>* - Reserve (e.g. *BOOK Badminton 5pm*)\n\nOr visit: http://localhost:5173`;
   }
 
-  res.type("text/xml");
-  return res.send(`
-    <Response>
-      <Message>${replyText}</Message>
-    </Response>
-  `);
+  res.setHeader("Content-Type", "text/xml");
+  return res.send(`<?xml version="1.0" encoding="UTF-8"?>
+<Response>
+  <Message>${escapeXml(replyText)}</Message>
+</Response>`);
 }

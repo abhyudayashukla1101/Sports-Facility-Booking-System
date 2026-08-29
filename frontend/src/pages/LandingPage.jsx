@@ -33,7 +33,7 @@ const UPCOMING_EVENTS = [
     date: "Oct 12 – Oct 15, 2026",
     venue: "SAC Sports Complex & Outdoor Grounds",
     teams: "32 IITs & NITs Participating",
-    image: "https://images.unsplash.com/photo-1574629810360-7efbbe195018?q=80&w=800&auto=format&fit=crop",
+    image: "/images/facilities/sac-cricket-ground.jpg",
     description: "The flagship annual sports extravaganza featuring athletics, cricket, football, badminton, and aquatic events."
   },
   {
@@ -43,7 +43,7 @@ const UPCOMING_EVENTS = [
     date: "Sep 05 – Sep 08, 2026",
     venue: "SAC Indoor Badminton Hall & Tennis Courts",
     teams: "14 Hostels Competing",
-    image: "https://images.unsplash.com/photo-1626224583764-f87db24ac4ea?q=80&w=800&auto=format&fit=crop",
+    image: "/images/facilities/badminton-hall.jpg",
     description: "Annual clash of hostels for the coveted Gymkhana Sports Shield. Singles and doubles categories."
   },
   {
@@ -53,7 +53,7 @@ const UPCOMING_EVENTS = [
     date: "Sep 18, 2026",
     venue: "IITG Olympic Swimming Pool",
     teams: "Open to All IITG Students",
-    image: "https://images.unsplash.com/photo-1600965962361-9035dbfd1c50?q=80&w=800&auto=format&fit=crop",
+    image: "/images/facilities/swimming-pool.jpg",
     description: "50m freestyle, backstroke, relay races, and water polo exhibition matches."
   }
 ];
@@ -234,7 +234,7 @@ export default function LandingPage() {
             </div>
 
             <h2 className="font-display text-3xl font-extrabold text-white sm:text-4xl max-w-2xl mx-auto leading-tight">
-              Join IIT Guwahati Playfield Today
+              Join IIT Guwahati Huddle Today
             </h2>
 
             <p className="max-w-xl mx-auto text-sm text-muted font-medium">

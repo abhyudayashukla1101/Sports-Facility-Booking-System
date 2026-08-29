@@ -1,4 +1,4 @@
-# 🏆 Playfield IITG — Campus Sports Facility Booking & Analytics Platform
+# 🏆 Huddle IITG — Campus Sports Facility Booking & Analytics Platform
 
 [![Hackathon Project](https://img.shields.io/badge/Hackathon-IIT%20Guwahati%20Gymkhana-orange.svg)](#-built-in-a-hackathon)
 [![Node.js](https://img.shields.io/badge/Backend-Node.js%20%7C%20Express-green.svg)](backend/server.js)
@@ -6,7 +6,7 @@
 [![AI-Powered](https://img.shields.io/badge/AI-Groq%20SDK%20%7C%20Llama%203-purple.svg)](backend/services/groqService.js)
 [![Notifications](https://img.shields.io/badge/Alerts-Twilio%20SMS%20%26%20WhatsApp-red.svg)](backend/services/twilioService.js)
 
-**Playfield IITG** is an end-to-end full-stack campus sports facility reservation, concurrency control, and intelligent operations platform engineered specifically for **IIT Guwahati Gymkhana Sports Complex**.
+**Huddle IITG** is an end-to-end full-stack campus sports facility reservation, concurrency control, and intelligent operations platform engineered specifically for **IIT Guwahati Gymkhana Sports Complex**.
 
 It solves real-world campus sports infrastructure bottlenecks—eliminating manual line-up queues, preventing double-booking conflicts, automating waitlist promotions, sending real-time SMS/WhatsApp updates, and providing AI-powered analytics insights to campus sports officers.
 
@@ -14,7 +14,7 @@ It solves real-world campus sports infrastructure bottlenecks—eliminating manu
 
 ## 🚀 Built in a Hackathon
 
-Playfield IITG was conceived, designed, and built during an intensive **Hackathon** to solve the high-concurrency reservation problem faced by thousands of campus students competing for limited sports slots (e.g., Badminton, Football, Basketball, Gym, Cricket) every day.
+Huddle IITG was conceived, designed, and built during an intensive **Hackathon** to solve the high-concurrency reservation problem faced by thousands of campus students competing for limited sports slots (e.g., Badminton, Football, Basketball, Gym, Cricket) every day.
 
 ### The Challenge
 - **Massive Traffic Spikes**: At slot opening times (e.g., 6:00 AM / 8:00 PM), hundreds of students tap "Book Now" simultaneously on the exact same court and time slot.

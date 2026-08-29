@@ -101,7 +101,7 @@ export const MOCK_FACILITIES = [
     capacity: 8,
     slotDuration: "60-min slots",
     hours: "6:00–22:00",
-    image: "https://images.unsplash.com/photo-1626224583764-f87db24ac4ea?q=80&w=1200&auto=format&fit=crop",
+    image: "/images/facilities/badminton-hall.jpg",
     description: "Four wooden indoor courts with anti-glare lighting inside the SAC hall.",
     rules: [
       "Indoor shoes compulsory",
@@ -118,7 +118,7 @@ export const MOCK_FACILITIES = [
     capacity: 12,
     slotDuration: "60-min slots",
     hours: "6:00–22:00",
-    image: "https://images.unsplash.com/photo-1546519638-68e109498ffc?q=80&w=1200&auto=format&fit=crop",
+    image: "/images/facilities/basketball-court.jpg",
     description: "Outdoor full court with floodlights for evening play.",
     rules: [
       "No metal studs",
@@ -135,7 +135,7 @@ export const MOCK_FACILITIES = [
     capacity: 22,
     slotDuration: "90-min slots",
     hours: "6:00–21:00",
-    image: "https://images.unsplash.com/photo-1508098682722-e99c43a406b2?q=80&w=1200&auto=format&fit=crop",
+    image: "/images/facilities/main-football-ground.jpg",
     description: "Full-size turf ground with floodlights, used for matches and practice.",
     rules: [
       "Studs only, no bare cleats on turf",
@@ -152,7 +152,7 @@ export const MOCK_FACILITIES = [
     capacity: 22,
     slotDuration: "120-min slots",
     hours: "6:00–21:00",
-    image: "https://images.unsplash.com/photo-1531415074968-036ba1b575da?q=80&w=1200&auto=format&fit=crop",
+    image: "/images/facilities/sac-cricket-ground.jpg",
     description: "Full cricket ground with practice nets on the side.",
     rules: [
       "Book nets separately for practice",
@@ -186,7 +186,7 @@ export const MOCK_FACILITIES = [
     capacity: 4,
     slotDuration: "60-min slots",
     hours: "6:00–22:00",
-    image: "https://images.unsplash.com/photo-1587280501635-68a0e82cd5ff?q=80&w=1200&auto=format&fit=crop",
+    image: "/images/facilities/squash-court.jpg",
     description: "Two glass-backed squash courts, racquets available on request.",
     rules: [
       "Non-marking shoes only",
@@ -203,7 +203,7 @@ export const MOCK_FACILITIES = [
     capacity: 24,
     slotDuration: "60-min slots",
     hours: "6:00–20:00",
-    image: "https://images.unsplash.com/photo-1576013551627-0cc20b96c2a7?q=80&w=1200&auto=format&fit=crop",
+    image: "/images/facilities/swimming-pool.jpg",
     description: "Eight-lane outdoor pool, lifeguard on duty during all open slots.",
     rules: [
       "Shower before entering",
@@ -220,7 +220,7 @@ export const MOCK_FACILITIES = [
     capacity: 12,
     slotDuration: "60-min slots",
     hours: "6:00–22:00",
-    image: "https://images.unsplash.com/photo-1609710228159-0fa9bd7c0827?q=80&w=1200&auto=format&fit=crop",
+    image: "/images/facilities/table-tennis-room.png",
     description: "Six tables in a climate-controlled room, paddles available at the counter.",
     rules: [
       "Bring your own paddle or borrow at counter",
@@ -237,7 +237,7 @@ export const MOCK_FACILITIES = [
     capacity: 6,
     slotDuration: "60-min slots",
     hours: "6:00–22:00",
-    image: "https://images.unsplash.com/photo-1595435934249-5df7ed86e1c0?q=80&w=1200&auto=format&fit=crop",
+    image: "/images/facilities/tennis-court.jpg",
     description: "Two hard courts near the hostel wing, lit for night play.",
     rules: [
       "Non-marking shoes only",

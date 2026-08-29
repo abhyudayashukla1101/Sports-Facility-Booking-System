@@ -8,7 +8,7 @@ export default function Hero({ facilityCount, searchValue, onSearchChange }) {
         className="absolute inset-0 bg-cover bg-center opacity-40 blur-[3px] scale-105 transform transition-transform duration-700"
         style={{
           backgroundImage:
-            "url('https://images.unsplash.com/photo-1574629810360-7efbbe195018?q=80&w=1800&auto=format&fit=crop')"
+            "url('/images/facilities/tennis-court.jpg')"
         }}
         aria-hidden="true"
       />
