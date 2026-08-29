@@ -1,9 +1,10 @@
-import sqlite3 from "sqlite3";
 import path from "path";
 import fs from "fs";
 import { fileURLToPath } from "url";
 import pg from "pg";
 import dotenv from "dotenv";
+
+let sqlite3 = null;
 
 dotenv.config();
 
@@ -96,6 +97,12 @@ export async function initDatabase() {
   }
 
   if (!isPg) {
+    try {
+      const sqlite3Module = await import("sqlite3");
+      sqlite3 = sqlite3Module.default;
+    } catch (e) {
+      console.error("Failed to load sqlite3:", e);
+    }
     sqliteDb = new sqlite3.Database(dbPath);
     sqliteDb.run("PRAGMA foreign_keys = ON;");
     console.log("Connected to SQLite database at:", dbPath);
