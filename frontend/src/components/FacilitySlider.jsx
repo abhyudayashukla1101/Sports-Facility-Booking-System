@@ -14,11 +14,30 @@ export default function FacilitySlider({ facilities = [] }) {
   const navigate = useNavigate();
   const [currentIndex, setCurrentIndex] = useState(0);
   const [isHovered, setIsHovered] = useState(false);
+  const [isInView, setIsInView] = useState(false);
 
+  const sliderRef = useRef(null);
+  const containerRef = useRef(null);
   const timerRef = useRef(null);
   const thumbRefs = useRef([]);
 
   const total = facilities.length;
+
+  // Track if the slider is currently visible in the viewport
+  useEffect(() => {
+    const observer = new IntersectionObserver(
+      ([entry]) => {
+        setIsInView(entry.isIntersecting);
+      },
+      { threshold: 0.2 }
+    );
+
+    if (sliderRef.current) {
+      observer.observe(sliderRef.current);
+    }
+
+    return () => observer.disconnect();
+  }, []);
 
   // Handle next & prev
   const nextSlide = () => {
@@ -31,9 +50,9 @@ export default function FacilitySlider({ facilities = [] }) {
     setCurrentIndex((prev) => (prev - 1 + total) % total);
   };
 
-  // Smooth auto-slide (3s interval)
+  // Smooth auto-slide ONLY when visible on screen and not hovered (3s interval)
   useEffect(() => {
-    if (total === 0 || isHovered) return;
+    if (total === 0 || isHovered || !isInView) return;
 
     timerRef.current = setInterval(() => {
       nextSlide();
@@ -42,15 +61,20 @@ export default function FacilitySlider({ facilities = [] }) {
     return () => {
       if (timerRef.current) clearInterval(timerRef.current);
     };
-  }, [total, isHovered, currentIndex]);
+  }, [total, isHovered, isInView, currentIndex]);
 
-  // Auto-scroll active thumbnail into view
+  // Smoothly scroll container ONLY (without scrolling window) when thumbnail changes
   useEffect(() => {
-    if (thumbRefs.current[currentIndex]) {
-      thumbRefs.current[currentIndex].scrollIntoView({
-        behavior: "smooth",
-        inline: "center",
-        block: "nearest"
+    const activeThumb = thumbRefs.current[currentIndex];
+    const container = containerRef.current;
+    if (activeThumb && container) {
+      const thumbLeft = activeThumb.offsetLeft;
+      const thumbWidth = activeThumb.offsetWidth;
+      const containerWidth = container.offsetWidth;
+
+      container.scrollTo({
+        left: thumbLeft - containerWidth / 2 + thumbWidth / 2,
+        behavior: "smooth"
       });
     }
   }, [currentIndex]);
@@ -62,7 +86,7 @@ export default function FacilitySlider({ facilities = [] }) {
   const currentFacility = facilities[currentIndex] || facilities[0];
 
   return (
-    <div className="space-y-6">
+    <div ref={sliderRef} className="space-y-6">
       {/* SECTION HEADER */}
       <div className="flex flex-wrap items-center justify-between gap-4">
         <div>
@@ -196,7 +220,7 @@ export default function FacilitySlider({ facilities = [] }) {
             </div>
 
             {/* Horizontal Scrollable Thumbnails (Scrollbars strictly hidden) */}
-            <div className="flex items-center gap-3 overflow-x-auto pb-1 pt-1 no-scrollbar [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden">
+            <div ref={containerRef} className="flex items-center gap-3 overflow-x-auto pb-1 pt-1 no-scrollbar [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden">
               {facilities.map((fac, idx) => (
                 <div
                   key={fac.id}
